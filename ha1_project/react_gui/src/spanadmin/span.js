@@ -1,32 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { fetchTeamWithMembers } from '../services/span_services';
+import React from 'react';
 import './span.css';
 
-function Span({ teamId = 1 }) {
-  const [team, setTeam] = useState(null);
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const fetchTeamData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const { team, members } = await fetchTeamWithMembers(teamId);
-      setTeam(team);
-      setMembers(members);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [teamId]);
-
-  useEffect(() => {
-    fetchTeamData();
-  }, [teamId, fetchTeamData]);
-
+function Span({ team, members, loading, error }) {
   if (loading) {
     return (
       <div className="span-container">
@@ -35,10 +10,18 @@ function Span({ teamId = 1 }) {
     );
   }
 
-  if (error && !team) {
+  if (error) {
     return (
       <div className="span-container">
         <div className="error">Fout: {error}</div>
+      </div>
+    );
+  }
+
+  if (!team) {
+    return (
+      <div className="span-container">
+        <div className="no-team">Geen span geselekteer nie</div>
       </div>
     );
   }

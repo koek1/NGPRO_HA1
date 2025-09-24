@@ -299,3 +299,234 @@ app.get("/stream", (req, res) => {
   
     res.status(200).json({ ok: true });
   });
+
+// Endpoint to store marks for a team
+app.post('/teams/:id/marks', async (req, res) => {
+  try {
+    const spanId = parseInt(req.params.id, 10);
+    if (isNaN(spanId)) {
+      return res.status(400).json({ error: 'Ongeldige span ID' });
+    }
+
+    // Validate that team exists
+    const team = await getTeamById(spanId);
+    if (!team) {
+      return res.status(404).json({ error: 'Span nie gevind nie' });
+    }
+
+    const { kriteria1, kriteria2, kriteria3 } = req.body;
+    
+    // Validate marks are provided and are numbers
+    if (kriteria1 === undefined || kriteria2 === undefined || kriteria3 === undefined) {
+      return res.status(400).json({ 
+        error: 'Alle kriteria punte is verpligtend' 
+      });
+    }
+
+    if (isNaN(kriteria1) || isNaN(kriteria2) || isNaN(kriteria3)) {
+      return res.status(400).json({ 
+        error: 'Punte moet nommers wees' 
+      });
+    }
+
+    // Get database connection
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    // Get the first round and criteria IDs (assuming we're using the first round)
+    const rondteId = 1;
+    const kriteriaIds = [1, 2, 3]; // Backend, Frontend, Database
+    const marks = [kriteria1, kriteria2, kriteria3];
+
+    // Start transaction
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+
+      // Delete existing marks for this team in this round
+      db.run('DELETE FROM Punte_span_brug WHERE span_id = ? AND merkblad_id IN (SELECT merkblad_id FROM Merkblad WHERE rondte_id = ?)', [spanId, rondteId], (err) => {
+        if (err) {
+          db.run('ROLLBACK');
+          res.status(500).json({ error: 'Kon nie bestaande punte verwyder nie', details: err.message });
+          db.close();
+          return;
+        }
+
+        // Insert new marks
+        let completed = 0;
+        let hasError = false;
+
+        kriteriaIds.forEach((kriteriaId, index) => {
+          // Get or create merkblad for this round and criteria
+          db.get('SELECT merkblad_id FROM Merkblad WHERE rondte_id = ? AND kriteria_id = ?', [rondteId, kriteriaId], (err, row) => {
+            if (err) {
+              hasError = true;
+              db.run('ROLLBACK');
+              res.status(500).json({ error: 'Kon nie merkblad kry nie', details: err.message });
+              db.close();
+              return;
+            }
+
+            let merkbladId;
+            if (row) {
+              merkbladId = row.merkblad_id;
+              insertMark(merkbladId, marks[index]);
+            } else {
+              // Create new merkblad
+              db.run('INSERT INTO Merkblad (rondte_id, kriteria_id, totaal) VALUES (?, ?, 100)', [rondteId, kriteriaId], function(err) {
+                if (err) {
+                  hasError = true;
+                  db.run('ROLLBACK');
+                  res.status(500).json({ error: 'Kon nie merkblad skep nie', details: err.message });
+                  db.close();
+                  return;
+                }
+                merkbladId = this.lastID;
+                insertMark(merkbladId, marks[index]);
+              });
+            }
+
+            function insertMark(merkbladId, mark) {
+              // Insert the mark
+              db.run('INSERT INTO Punte_span_brug (merkblad_id, span_id, punt) VALUES (?, ?, ?)', [merkbladId, spanId, mark], function(err) {
+                if (err) {
+                  hasError = true;
+                  db.run('ROLLBACK');
+                  res.status(500).json({ error: 'Kon nie punt stoor nie', details: err.message });
+                  db.close();
+                  return;
+                }
+
+                completed++;
+                if (completed === kriteriaIds.length && !hasError) {
+                  db.run('COMMIT', (err) => {
+                    if (err) {
+                      res.status(500).json({ error: 'Kon nie transaksie voltooi nie', details: err.message });
+                    } else {
+                      res.status(201).json({ 
+                        message: 'Punte suksesvol gestoor',
+                        span_id: spanId,
+                        marks: {
+                          kriteria1: kriteria1,
+                          kriteria2: kriteria2,
+                          kriteria3: kriteria3
+                        }
+                      });
+                    }
+                    db.close();
+                  });
+                }
+              });
+            }
+          });
+        });
+      });
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie punte stoor nie', details: err.message });
+  }
+});
+
+// Endpoint to get marks for a team
+app.get('/teams/:id/marks', async (req, res) => {
+  try {
+    const spanId = parseInt(req.params.id, 10);
+    if (isNaN(spanId)) {
+      return res.status(400).json({ error: 'Ongeldige span ID' });
+    }
+
+    // Validate that team exists
+    const team = await getTeamById(spanId);
+    if (!team) {
+      return res.status(404).json({ error: 'Span nie gevind nie' });
+    }
+
+    // Get database connection
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    // Get marks for this team
+    db.all(`
+      SELECT 
+        psb.punt,
+        k.beskrywing as kriteria_naam,
+        k.kriteria_id
+      FROM Punte_span_brug psb
+      JOIN Merkblad m ON psb.merkblad_id = m.merkblad_id
+      JOIN Kriteria k ON m.kriteria_id = k.kriteria_id
+      WHERE psb.span_id = ? AND m.rondte_id = 1
+      ORDER BY k.kriteria_id
+    `, [spanId], (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: 'Kon nie punte laai nie', details: err.message });
+      } else {
+        // Format the response
+        const marks = {
+          kriteria1: null,
+          kriteria2: null,
+          kriteria3: null
+        };
+
+        rows.forEach(row => {
+          if (row.kriteria_id === 1) marks.kriteria1 = row.punt;
+          if (row.kriteria_id === 2) marks.kriteria2 = row.punt;
+          if (row.kriteria_id === 3) marks.kriteria3 = row.punt;
+        });
+
+        // Only consider it as having marks if at least one mark is greater than 0
+        const hasActualMarks = rows.length > 0 && (marks.kriteria1 > 0 || marks.kriteria2 > 0 || marks.kriteria3 > 0);
+
+        res.json({
+          span_id: spanId,
+          has_marks: hasActualMarks,
+          marks: marks,
+          details: rows
+        });
+      }
+      db.close();
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie punte laai nie', details: err.message });
+  }
+});
+
+// Endpoint to delete marks for a team
+app.delete('/teams/:id/marks', async (req, res) => {
+  try {
+    const spanId = parseInt(req.params.id, 10);
+    if (isNaN(spanId)) {
+      return res.status(400).json({ error: 'Ongeldige span ID' });
+    }
+
+    // Validate that team exists
+    const team = await getTeamById(spanId);
+    if (!team) {
+      return res.status(404).json({ error: 'Span nie gevind nie' });
+    }
+
+    // Get database connection
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    // Delete all marks for this team
+    db.run('DELETE FROM Punte_span_brug WHERE span_id = ?', [spanId], function(err) {
+      if (err) {
+        res.status(500).json({ error: 'Kon nie punte verwyder nie', details: err.message });
+      } else {
+        res.status(200).json({ 
+          message: 'Punte suksesvol verwyder',
+          span_id: spanId,
+          deleted_rows: this.changes
+        });
+      }
+      db.close();
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie punte verwyder nie', details: err.message });
+  }
+});

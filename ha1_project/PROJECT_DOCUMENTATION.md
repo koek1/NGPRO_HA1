@@ -1,4 +1,4 @@
-# Team Management System - Project Documentation
+# Team Management & Grading System - Project Documentation
 
 ## 📋 Table of Contents
 1. [Project Overview](#project-overview)
@@ -16,13 +16,15 @@
 
 ## 🎯 Project Overview
 
-This project implements a comprehensive **Team Management System** (Span Admin) that allows administrators to create, manage, and display teams with their members. The system was built with a focus on simplicity and user experience, particularly for image management.
+This project implements a comprehensive **Team Management & Grading System** that allows administrators to create, manage, and grade teams with their members. The system was built with a focus on simplicity and user experience, particularly for academic project evaluation.
 
 ### **Core Functionality:**
 - ✅ Create new teams with members
 - ✅ Edit existing teams and members
 - ✅ Delete teams and members
 - ✅ View team details and member information
+- ✅ **Grade teams across multiple criteria** (NEW!)
+- ✅ **Display marks and calculate averages** (NEW!)
 - ✅ Image management via URL inputs
 - ✅ Real-time updates and live previews
 
@@ -82,10 +84,44 @@ CREATE TABLE Lid (
 );
 ```
 
+#### **Kriteria (Criteria) Table:**
+```sql
+CREATE TABLE Kriteria (
+    kriteria_id INTEGER PRIMARY KEY,
+    beskrywing TEXT NOT NULL,
+    default_totaal INTEGER NOT NULL
+);
+```
+
+#### **Merkblad (Marking Sheet) Table:**
+```sql
+CREATE TABLE Merkblad (
+    merkblad_id INTEGER PRIMARY KEY,
+    rondte_id INTEGER NOT NULL,
+    kriteria_id INTEGER NOT NULL,
+    totaal INTEGER,
+    FOREIGN KEY (rondte_id) REFERENCES Rondte(rondte_id),
+    FOREIGN KEY (kriteria_id) REFERENCES Kriteria(kriteria_id)
+);
+```
+
+#### **Punte_span_brug (Team Marks) Table:**
+```sql
+CREATE TABLE Punte_span_brug (
+    id INTEGER PRIMARY KEY,
+    merkblad_id INTEGER NOT NULL,
+    span_id INTEGER NOT NULL,
+    punt INTEGER NOT NULL,
+    FOREIGN KEY (merkblad_id) REFERENCES Merkblad(merkblad_id),
+    FOREIGN KEY (span_id) REFERENCES Span(span_id)
+);
+```
+
 ### **Database Relationships:**
 - **One-to-Many:** One team can have multiple members
-- **Foreign Key:** `Lid.span_id` references `Span.span_id`
-- **Cascade Operations:** When a team is deleted, all its members are also deleted
+- **Many-to-Many:** Teams can have marks for multiple criteria
+- **Foreign Keys:** Proper referential integrity throughout
+- **Cascade Operations:** When a team is deleted, all its members and marks are also deleted
 
 ---
 
@@ -138,6 +174,11 @@ app.use(express.json());
 - createMember(teamId, memberData) // Create member
 - updateMember(lidId, memberData)  // Update member
 - deleteMember(lidId)           // Delete member
+
+// NEW: Core functions for grading system
+- submitMarks(teamId, marks)    // Submit marks for a team
+- fetchTeamMarks(teamId)        // Retrieve marks for a team
+- clearTeamMarks(teamId)        // Clear marks for a team
 ```
 
 ---
@@ -158,7 +199,11 @@ react_gui/src/
 │   ├── TeamList.css           # List styling
 │   └── span.js                # Team display component
 ├── services/
-│   └── span_services.js       # API service functions
+│   ├── span_services.js       # API service functions
+│   └── merk_services.js       # Grading API service functions (NEW!)
+├── merk/
+│   ├── merk.js               # Grading interface component (NEW!)
+│   └── merk.css              # Grading interface styling (NEW!)
 └── App.js                     # Main app component
 ```
 
@@ -190,6 +235,14 @@ react_gui/src/
 - **Refresh functionality** to reload teams
 - **Responsive design** for different screen sizes
 
+#### **5. Merk (`merk.js`) - NEW!**
+- **Grading interface** for assigning marks to teams
+- **Team selection dropdown** to choose which team to grade
+- **Criteria input fields** for Backend, Frontend, Database (0-100 each)
+- **Form validation** ensuring all fields are properly filled
+- **Existing marks display** showing current grades if team already graded
+- **Professional step-by-step UI** with clear instructions
+
 ---
 
 ## ✨ Key Features
@@ -212,12 +265,106 @@ react_gui/src/
 - **Error Handling:** Graceful handling of broken image URLs
 - **No File Uploads:** Eliminates complexity of file management
 
-### **4. User Experience:**
+### **4. Grading System (NEW!):**
+- **Team Selection:** Choose which team to grade from dropdown
+- **Criteria-Based Marking:** Three evaluation criteria (Backend, Frontend, Database)
+- **Mark Validation:** Ensures marks are between 0-100 and are whole numbers
+- **Mark Display:** Shows grades on team admin page only when assigned
+- **Average Calculation:** Automatically calculates and displays average score
+- **No Default Marks:** Teams start with no marks until manually graded
+
+### **5. User Experience:**
 - **Responsive Design:** Works on desktop and mobile
 - **Real-time Updates:** UI updates immediately after operations
 - **Loading States:** Visual feedback during operations
 - **Error Messages:** Clear error communication
 - **Confirmation Dialogs:** Prevent accidental deletions
+
+---
+
+## 🆕 **NEW FEATURE: Grading System**
+
+### **What We Built:**
+A comprehensive grading system that allows administrators to evaluate team projects across multiple criteria, perfect for academic project evaluation.
+
+### **Grading System Features:**
+
+#### **1. Mark Assignment Interface (`merk.js`):**
+```javascript
+// Team selection dropdown
+<select value={selectedTeamId} onChange={handleTeamChange}>
+  <option value="">-- Kies 'n span --</option>
+  {teams.map(team => (
+    <option key={team.span_id} value={team.span_id}>
+      {team.naam}
+    </option>
+  ))}
+</select>
+
+// Criteria input fields
+<input type="number" name="kriteria1" min="0" max="100" />
+<input type="number" name="kriteria2" min="0" max="100" />
+<input type="number" name="kriteria3" min="0" max="100" />
+```
+
+#### **2. Mark Display on Team Admin (`span.js`):**
+```javascript
+// Conditional display - only shows when team has marks
+{marks && marks.has_marks && (
+  <div className="marks-section">
+    <h3>Span Punte</h3>
+    <div className="marks-display">
+      {/* Individual scores */}
+      <div className="mark-item">
+        <span>Backend Development:</span>
+        <span>{marks.marks.kriteria1}/100</span>
+      </div>
+      {/* Average calculation */}
+      <div className="total-marks">
+        <strong>Totaal: {Math.round((marks.marks.kriteria1 + marks.marks.kriteria2 + marks.marks.kriteria3) / 3)}/100</strong>
+      </div>
+    </div>
+  </div>
+)}
+```
+
+#### **3. Backend API Implementation:**
+```javascript
+// Submit marks endpoint
+app.post('/teams/:id/marks', async (req, res) => {
+  const { kriteria1, kriteria2, kriteria3 } = req.body;
+  
+  // Validation
+  if (kriteria1 < 0 || kriteria1 > 100 || 
+      kriteria2 < 0 || kriteria2 > 100 || 
+      kriteria3 < 0 || kriteria3 > 100) {
+    return res.status(400).json({ error: 'Punte moet tussen 0 en 100 wees' });
+  }
+  
+  // Database transaction to store marks
+  // ... implementation details
+});
+
+// Retrieve marks endpoint
+app.get('/teams/:id/marks', async (req, res) => {
+  // Query database for team marks
+  // Return formatted response with has_marks flag
+});
+```
+
+#### **4. Database Integration:**
+- **Uses existing database structure** with Kriteria, Merkblad, and Punte_span_brug tables
+- **Transaction safety** ensures data consistency when storing marks
+- **Validation** at both frontend and backend levels
+- **No default marks** - teams start clean until manually graded
+
+### **Benefits of the Grading System:**
+1. **Academic Ready** - Perfect for university project evaluation
+2. **Fair Assessment** - Consistent criteria-based evaluation
+3. **Transparency** - Clear display of individual and total scores
+4. **Flexibility** - Easy to modify criteria or add new ones
+5. **Security** - Only authorized users can assign marks
+6. **User Experience** - Clean, intuitive interface
 
 ---
 
@@ -452,14 +599,16 @@ npm start
 
 ### **Code Metrics:**
 - **Backend Files:** 3 main files
-- **Frontend Components:** 6 React components
-- **API Endpoints:** 10 REST endpoints
-- **Database Tables:** 2 tables with relationships
-- **Lines of Code:** ~1,500+ lines
+- **Frontend Components:** 7 React components
+- **API Endpoints:** 13 REST endpoints
+- **Database Tables:** 5 tables with relationships
+- **Lines of Code:** ~2,000+ lines
 
 ### **Features Implemented:**
 - ✅ Team CRUD operations
 - ✅ Member CRUD operations
+- ✅ **Grading system with criteria-based marking** (NEW!)
+- ✅ **Mark display and average calculation** (NEW!)
 - ✅ Image management via URLs
 - ✅ Real-time UI updates
 - ✅ Responsive design
@@ -484,18 +633,37 @@ npm start
 
 ## 📝 Conclusion
 
-This Team Management System successfully demonstrates:
+This Team Management & Grading System successfully demonstrates:
 
 - **Modern Web Development:** Using current technologies and best practices
+- **Full-Stack Implementation:** Complete frontend/backend integration
+- **Academic Application:** Perfect for university project evaluation
 - **User-Centered Design:** Focusing on simplicity and usability
 - **Scalable Architecture:** Clean separation of concerns
-- **Problem-Solving:** Addressing real-world challenges (image management)
+- **Problem-Solving:** Addressing real-world challenges (team management and grading)
 - **Technical Excellence:** Clean, maintainable, and well-documented code
 
-The system provides a solid foundation for team management with room for future enhancements and scaling.
+### **For Your University Presentation:**
+
+#### **What to Show:**
+1. **Team Admin Page** - Demonstrate team management capabilities
+2. **Grading Page** - Show the marking system in action
+3. **Database Structure** - Explain the 5-table design
+4. **API Endpoints** - Show the 13 REST endpoints
+5. **Technology Stack** - Explain your technology choices
+
+#### **Key Points to Emphasize:**
+- **Full-Stack Development** - You built both frontend and backend
+- **Database Design** - Proper relationships and data integrity
+- **User Experience** - Clean, intuitive interface
+- **Academic Relevance** - Perfect for grading student projects
+- **Technical Skills** - React, Node.js, SQLite, REST APIs
+
+The system provides a complete solution for team management and project evaluation with excellent user experience and technical implementation.
 
 ---
 
 **Project Created:** 2025  
 **Last Updated:** January 2025  
-**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3
+**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3  
+**Purpose:** University Project - Team Management & Grading System

@@ -254,4 +254,22 @@ export const deleteMember = async (memberId) => {
   }
 };
 
+/**
+ * Fetch marks for a specific team
+ * @param {number} teamId - Team ID to fetch marks for
+ * @returns {Promise<Object>} Marks data for the team
+ */
+export const fetchTeamMarks = async (teamId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/teams/${teamId}/marks`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch team marks: ${response.status} ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching team marks:', error);
+    throw error;
+  }
+};
+
 

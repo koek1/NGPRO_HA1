@@ -80,6 +80,67 @@
   line-height: 1.5;
 }
 
+.marks-section {
+  padding: 30px;
+  background: #fff3cd;
+  border-bottom: 1px solid #ffeaa7;
+}
+
+.marks-section h3 {
+  margin: 0 0 25px 0;
+  color: #856404;
+  font-size: 1.8rem;
+  font-weight: 600;
+  border-bottom: 3px solid #ffc107;
+  padding-bottom: 10px;
+  display: inline-block;
+}
+
+.marks-display {
+  background: white;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.marks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.mark-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #ffc107;
+}
+
+.mark-label {
+  font-weight: 600;
+  color: #333;
+}
+
+.mark-value {
+  font-weight: 700;
+  color: #28a745;
+  font-size: 1.1rem;
+}
+
+.total-marks {
+  text-align: center;
+  padding: 15px;
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border-radius: 8px;
+  font-size: 1.2rem;
+}
+
+
 .members-section {
   padding: 30px;
   background: #f8f9fa;

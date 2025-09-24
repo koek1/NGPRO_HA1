@@ -1,7 +1,7 @@
-# Team Management System - Presentation Summary
+# Team Management & Grading System - Presentation Summary
 
 ## 🎯 **Project Overview**
-**Built a comprehensive Team Management System (Span Admin) that allows administrators to create, manage, and display teams with their members.**
+**Built a comprehensive Team Management & Grading System that allows administrators to create, manage, and grade teams with their members. The system includes both team administration and a sophisticated grading system for evaluating team projects.**
 
 ---
 
@@ -25,8 +25,9 @@
 ┌─────────────────┐                     ┌─────────────────┐
 │   User Interface │                     │   SQLite3 DB    │
 │   - Team Admin   │                     │   - Teams       │
-│   - Forms        │                     │   - Members     │
-│   - Lists        │                     │   - Images      │
+│   - Grading      │                     │   - Members     │
+│   - Forms        │                     │   - Marks       │
+│   - Lists        │                     │   - Criteria    │
 └─────────────────┘                     └─────────────────┘
 ```
 
@@ -34,13 +35,17 @@
 
 ## 🗄️ **Database Design**
 
-### **Two Main Tables:**
+### **Core Tables:**
 1. **Span (Teams):** `span_id`, `naam`, `projek_beskrywing`, `span_bio`, `logo`
 2. **Lid (Members):** `lid_id`, `span_id`, `naam`, `bio`, `foto`
+3. **Kriteria (Criteria):** `kriteria_id`, `beskrywing`, `default_totaal`
+4. **Merkblad (Marking Sheet):** `merkblad_id`, `rondte_id`, `kriteria_id`, `totaal`
+5. **Punte_span_brug (Team Marks):** `id`, `merkblad_id`, `span_id`, `punt`
 
 ### **Relationships:**
 - **One-to-Many:** One team can have multiple members
-- **Foreign Key:** Members reference their team via `span_id`
+- **Many-to-Many:** Teams can have marks for multiple criteria
+- **Foreign Keys:** Proper referential integrity throughout
 
 ---
 
@@ -58,7 +63,15 @@
 - ✅ **Remove Members** - Delete individual members
 - ✅ **Member Display** - Show photos and bios
 
-### **3. Image Management:**
+### **3. Grading System (NEW!):**
+- ✅ **Team Selection** - Choose teams to grade
+- ✅ **Criteria-Based Marking** - Backend, Frontend, Database (0-100 each)
+- ✅ **Mark Submission** - Secure mark assignment system
+- ✅ **Mark Display** - Show grades on team admin page
+- ✅ **Average Calculation** - Automatic total score calculation
+- ✅ **No Default Marks** - Teams start with no marks until graded
+
+### **4. Image Management:**
 - ✅ **URL Input System** - Simple paste image URLs
 - ✅ **Live Previews** - Real-time image preview
 - ✅ **Error Handling** - Graceful handling of broken URLs
@@ -66,34 +79,46 @@
 
 ---
 
-## 🔄 **Major Recent Change: URL Input System**
+## 🆕 **Major New Feature: Grading System**
 
-### **Problem Solved:**
-- **Before:** Complex file upload system with reliability issues
-- **After:** Simple URL input system with immediate feedback
+### **What We Built:**
+A comprehensive grading system that allows administrators to evaluate team projects across multiple criteria.
 
-### **What Changed:**
+### **Grading Features:**
 
-#### **Frontend Changes:**
+#### **1. Mark Assignment Page:**
+- **Team Selection:** Dropdown to choose which team to grade
+- **Criteria Input:** Three input fields for Backend, Frontend, Database (0-100 each)
+- **Form Validation:** Ensures all fields are filled with valid numbers
+- **Existing Marks Display:** Shows current marks if team already graded
+- **Professional UI:** Step-by-step process with clear instructions
+
+#### **2. Mark Display on Team Admin:**
+- **Conditional Display:** Marks section only appears when team has been graded
+- **Individual Scores:** Shows each criteria score out of 100
+- **Average Calculation:** Displays total as average out of 100
+- **Clean Interface:** No marks shown until manually assigned
+
+#### **3. Backend API:**
 ```javascript
-// BEFORE: File input
-<input type="file" accept="image/*" />
-
-// AFTER: URL input  
-<input type="url" placeholder="https://example.com/image.jpg" />
+// New endpoints added
+POST /teams/:id/marks     // Submit marks for a team
+GET  /teams/:id/marks     // Retrieve marks for a team
+DELETE /teams/:id/marks   // Clear marks for a team
 ```
 
-#### **Backend Changes:**
-- **Removed:** Multer file upload middleware
-- **Removed:** File upload endpoints (`/teams/:id/logo`, `/members/:id/photo`)
-- **Removed:** File storage and processing logic
+#### **4. Database Integration:**
+- **Marks Storage:** Uses existing database structure
+- **Transaction Safety:** Ensures data consistency
+- **Validation:** Server-side validation of mark values
+- **No Default Marks:** Teams start with no marks until graded
 
-#### **Benefits:**
-1. **Simplicity** - Users just paste URLs
-2. **Reliability** - No upload failures
-3. **Performance** - No file processing overhead
-4. **Flexibility** - Use images from anywhere
-5. **Maintenance** - Less code to maintain
+### **Benefits:**
+1. **Academic Use** - Perfect for grading student projects
+2. **Fair Assessment** - Consistent criteria-based evaluation
+3. **Transparency** - Clear display of individual and total scores
+4. **Flexibility** - Easy to modify criteria or add new ones
+5. **Security** - Only authorized users can assign marks
 
 ---
 
@@ -111,6 +136,11 @@
 - `PUT /members/:id` - Update member
 - `DELETE /members/:id` - Delete member
 
+### **Grading Operations (NEW!):**
+- `POST /teams/:id/marks` - Submit marks for a team
+- `GET /teams/:id/marks` - Retrieve marks for a team
+- `DELETE /teams/:id/marks` - Clear marks for a team
+
 ---
 
 ## 🎨 **User Interface Components**
@@ -120,7 +150,8 @@
 2. **CreateTeamForm** - Form for creating new teams
 3. **EditTeamForm** - Form for editing existing teams
 4. **TeamList** - Sidebar showing all teams
-5. **Span** - Team display component
+5. **Span** - Team display component (with marks display)
+6. **Merk** - Grading interface for assigning marks (NEW!)
 
 ### **User Experience Features:**
 - **Real-time Updates** - UI updates immediately after operations
@@ -173,11 +204,12 @@ npm start  # Runs on http://localhost:3000
 ## 📊 **Project Statistics**
 
 - **Backend Files:** 3 main files
-- **Frontend Components:** 6 React components  
-- **API Endpoints:** 10 REST endpoints
-- **Database Tables:** 2 tables with relationships
-- **Lines of Code:** 1,500+ lines
-- **Features:** 8 major features implemented
+- **Frontend Components:** 7 React components  
+- **API Endpoints:** 13 REST endpoints
+- **Database Tables:** 5 tables with relationships
+- **Lines of Code:** 2,000+ lines
+- **Features:** 12 major features implemented
+- **Grading Criteria:** 3 evaluation criteria (Backend, Frontend, Database)
 
 ---
 
@@ -196,11 +228,13 @@ npm start  # Runs on http://localhost:3000
 
 ### **What We Built:**
 - ✅ **Complete CRUD System** - Full team and member management
+- ✅ **Grading System** - Comprehensive team evaluation system
 - ✅ **Modern UI/UX** - Professional, responsive interface
 - ✅ **Reliable Image System** - URL-based image management
 - ✅ **Clean Architecture** - Maintainable, scalable code
 - ✅ **Real-time Updates** - Immediate UI feedback
 - ✅ **Error Handling** - Robust error management
+- ✅ **Academic Ready** - Perfect for university project evaluation
 
 ### **Technical Excellence:**
 - **Clean Code** - Well-structured, documented codebase
@@ -213,16 +247,25 @@ npm start  # Runs on http://localhost:3000
 
 ## 📝 **Conclusion**
 
-This Team Management System demonstrates:
+This Team Management & Grading System demonstrates:
 
-- **Modern Web Development** using current technologies
+- **Modern Web Development** using current technologies (React, Node.js, SQLite)
+- **Full-Stack Implementation** with proper frontend/backend separation
+- **Academic Application** perfect for university project evaluation
 - **Problem-Solving** by addressing real-world challenges
-- **User-Centered Design** focusing on simplicity
+- **User-Centered Design** focusing on simplicity and usability
 - **Technical Excellence** with clean, maintainable code
 - **Scalable Architecture** ready for future enhancements
 
-**The system provides a solid foundation for team management with excellent user experience and technical implementation.**
+### **For Your Presentation:**
+1. **Show the Team Admin page** - Demonstrate team management
+2. **Show the Grading page** - Demonstrate the marking system
+3. **Explain the database** - Show how data is structured
+4. **Highlight the API** - Show the backend endpoints
+5. **Discuss the technology stack** - Explain your choices
+
+**The system provides a complete solution for team management and project evaluation with excellent user experience and technical implementation.**
 
 ---
 
-**Ready for Production Use! 🚀**
+**Ready for University Presentation! 🎓🚀**

@@ -8,9 +8,10 @@
 5. [Frontend Implementation](#frontend-implementation)
 6. [Key Features](#key-features)
 7. [Recent Changes - URL Input System](#recent-changes---url-input-system)
-8. [API Endpoints](#api-endpoints)
-9. [How to Run the Project](#how-to-run-the-project)
-10. [Technical Decisions](#technical-decisions)
+8. [Recent Changes - Beoordelaar Admin Interface Simplification](#recent-changes---beoordelaar-admin-interface-simplification)
+9. [API Endpoints](#api-endpoints)
+10. [How to Run the Project](#how-to-run-the-project)
+11. [Technical Decisions](#technical-decisions)
 
 ---
 
@@ -604,6 +605,94 @@ export const uploadMemberPhoto = async (memberId, photoFile) => {...};
 
 ---
 
+## 🔄 Recent Changes - Beoordelaar Admin Interface Simplification
+
+### **Problem Solved:**
+The beoordelaar admin interface had become overly complex with features that were not needed for the final round system. The interface included:
+- Real-time updates that were not essential for the core functionality
+- "Vertoon Uitslag" (Show Results) button that was redundant
+- "Skep Volgende Rondte" (Create Next Round) button that was unnecessary since round 2 is the final round
+
+### **Solution Implemented:**
+Simplified the beoordelaar admin interface to focus on essential functionality only, removing unnecessary features and streamlining the user experience.
+
+### **Changes Made:**
+
+#### **1. Removed Unnecessary Buttons:**
+- **"Vertoon Uitslag" Button:** Completely removed as it was redundant with the winner display functionality
+- **"Skep Volgende Rondte" Button:** Removed since round 2 is the final round and no additional rounds are needed
+
+#### **2. Removed Real-time Updates Section:**
+- **Real-time Marks Display:** Removed the entire real-time marks streaming section
+- **EventSource Connection:** Removed the WebSocket-like connection to the server stream
+- **Live Updates:** Eliminated the real-time mark updates that were displayed in the interface
+
+#### **3. Code Cleanup:**
+- **Removed Unused State Variables:** Eliminated `realtimeMarks` and `eliminationResults` state variables
+- **Removed Unused Functions:** Deleted `handleShowEliminationResults` and `handleCreateNextRound` functions
+- **Removed Unused Imports:** Cleaned up imports for `fetchEliminationResults` and `createNextRound` services
+- **Removed Unused useEffect:** Eliminated the real-time updates useEffect hook
+
+#### **4. Simplified Interface Structure:**
+```javascript
+// BEFORE: Complex interface with multiple sections
+<div className="beoordelaar-admin-container">
+  <div className="admin-header">...</div>
+  <div className="realtime-marks">...</div>  // REMOVED
+  <div className="teams-marks-section">...</div>
+  <div className="round-management">...</div>
+  <div className="winner-section">...</div>
+  <div className="elimination-results">...</div>  // REMOVED
+</div>
+
+// AFTER: Streamlined interface
+<div className="beoordelaar-admin-container">
+  <div className="admin-header">...</div>
+  <div className="teams-marks-section">...</div>
+  <div className="round-management">...</div>
+  <div className="winner-section">...</div>
+</div>
+```
+
+#### **5. Updated Winner Display Logic:**
+```javascript
+// BEFORE: Used eliminationResults for final round detection
+<h3>{eliminationResults?.is_final_round ? '🏆 ALGEHELE WENNER 🏆' : '🏆 Wenner Span'}</h3>
+
+// AFTER: Uses selectedRound for final round detection
+<h3>🏆 Wenner Span</h3>
+{selectedRound?.is_laaste && (
+  <div className="overall-winner-banner">
+    <p><strong>Proficiat! Hierdie span het die hele toernooi gewen!</strong></p>
+  </div>
+)}
+```
+
+### **Benefits of the Simplification:**
+
+1. **Cleaner Interface:** Removed clutter and focused on essential functionality
+2. **Better Performance:** Eliminated unnecessary real-time connections and state updates
+3. **Simplified Codebase:** Reduced complexity and improved maintainability
+4. **Clearer User Experience:** Users can focus on core tasks without distractions
+5. **Final Round Focus:** Interface now properly reflects that round 2 is the final round
+6. **Reduced Dependencies:** Fewer API calls and service dependencies
+
+### **Current Beoordelaar Admin Features:**
+- ✅ **Round Selection:** Choose which round to view and manage
+- ✅ **Teams Display:** View teams with their marks for the selected round
+- ✅ **Round Management:** Close rounds and determine winners
+- ✅ **Winner Display:** Show the winning team with detailed information
+- ✅ **Final Round Support:** Proper handling of round 2 as the final round
+
+### **Removed Features:**
+- ❌ Real-time mark updates streaming
+- ❌ "Vertoon Uitslag" button
+- ❌ "Skep Volgende Rondte" button
+- ❌ Elimination results display section
+- ❌ Complex real-time state management
+
+---
+
 ## 🌐 API Endpoints
 
 ### **Team Endpoints:**
@@ -753,23 +842,27 @@ npm start
 - **Frontend Components:** 9 React components
 - **API Endpoints:** 18 REST endpoints
 - **Database Tables:** 5 tables with relationships
-- **Lines of Code:** ~3,500+ lines
+- **Lines of Code:** ~3,200+ lines (reduced after simplification)
 
 ### **Features Implemented:**
 - ✅ Team CRUD operations
 - ✅ Member CRUD operations
-- ✅ **Grading system with criteria-based marking** (NEW!)
-- ✅ **Mark display and average calculation** (NEW!)
-- ✅ **Beoordelaar Admin Panel** (NEW!)
-- ✅ **Real-time marks streaming** (NEW!)
-- ✅ **Round management and winner determination** (NEW!)
-- ✅ **Winner display with team members** (NEW!)
+- ✅ **Grading system with criteria-based marking**
+- ✅ **Mark display and average calculation**
+- ✅ **Simplified Beoordelaar Admin Panel** (UPDATED!)
+- ✅ **Round management and winner determination**
+- ✅ **Winner display with team members**
+- ✅ **Final round support (Round 2)** (UPDATED!)
 - ✅ Image management via URLs
-- ✅ Real-time UI updates
 - ✅ Responsive design
 - ✅ Error handling
 - ✅ Loading states
 - ✅ Confirmation dialogs
+
+### **Recently Removed Features:**
+- ❌ Real-time marks streaming (removed for simplicity)
+- ❌ Complex elimination results display (simplified)
+- ❌ Unnecessary round management buttons (streamlined)
 
 ---
 

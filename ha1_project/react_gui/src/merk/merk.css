@@ -148,6 +148,21 @@
   font-weight: 500;
 }
 
+.marks-section {
+  margin-top: 15px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.marks-section strong {
+  color: #495057;
+  font-size: 1.1rem;
+  display: block;
+  margin-bottom: 10px;
+}
+
 .marks-form {
   display: grid;
   gap: 25px;

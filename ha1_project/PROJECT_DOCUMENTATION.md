@@ -8,9 +8,10 @@
 5. [Frontend Implementation](#frontend-implementation)
 6. [Key Features](#key-features)
 7. [Recent Changes - URL Input System](#recent-changes---url-input-system)
-8. [API Endpoints](#api-endpoints)
-9. [How to Run the Project](#how-to-run-the-project)
-10. [Technical Decisions](#technical-decisions)
+8. [Recent Changes - Beoordelaar Admin Interface Simplification](#recent-changes---beoordelaar-admin-interface-simplification)
+9. [API Endpoints](#api-endpoints)
+10. [How to Run the Project](#how-to-run-the-project)
+11. [Technical Decisions](#technical-decisions)
 
 ---
 
@@ -25,6 +26,9 @@ This project implements a comprehensive **Team Management & Grading System** tha
 - ✅ View team details and member information
 - ✅ **Grade teams across multiple criteria** (NEW!)
 - ✅ **Display marks and calculate averages** (NEW!)
+- ✅ **Beoordelaar Admin Panel** (NEW!)
+- ✅ **Round management and winner determination** (NEW!)
+- ✅ **Real-time marks streaming** (NEW!)
 - ✅ Image management via URL inputs
 - ✅ Real-time updates and live previews
 
@@ -81,6 +85,17 @@ CREATE TABLE Lid (
     bio TEXT NOT NULL,
     foto TEXT,
     FOREIGN KEY (span_id) REFERENCES Span(span_id)
+);
+```
+
+#### **Rondte (Rounds) Table:**
+```sql
+CREATE TABLE Rondte (
+    rondte_id INTEGER PRIMARY KEY,
+    is_eerste INTEGER NOT NULL DEFAULT 0,
+    is_laaste INTEGER NOT NULL DEFAULT 0,
+    is_gesluit INTEGER NOT NULL DEFAULT 0,
+    max_spanne REAL NOT NULL 
 );
 ```
 
@@ -200,10 +215,14 @@ react_gui/src/
 │   └── span.js                # Team display component
 ├── services/
 │   ├── span_services.js       # API service functions
-│   └── merk_services.js       # Grading API service functions (NEW!)
+│   ├── merk_services.js       # Grading API service functions (NEW!)
+│   └── beoordelaar_services.js # Beoordelaar admin API services (NEW!)
 ├── merk/
 │   ├── merk.js               # Grading interface component (NEW!)
 │   └── merk.css              # Grading interface styling (NEW!)
+├── beoordelaaradmin/
+│   ├── beoordelaaradmin.js   # Beoordelaar admin panel (NEW!)
+│   └── beoordelaaradmin.css  # Admin panel styling (NEW!)
 └── App.js                     # Main app component
 ```
 
@@ -243,6 +262,16 @@ react_gui/src/
 - **Existing marks display** showing current grades if team already graded
 - **Professional step-by-step UI** with clear instructions
 
+#### **6. BeoordelaarAdmin (`beoordelaaradmin.js`) - NEW!**
+- **Comprehensive admin panel** for managing rounds and viewing results
+- **Round selection** to choose which round to manage
+- **Real-time marks display** showing live updates as marks are submitted
+- **Teams with marks overview** displaying all teams and their current scores
+- **Round closure functionality** to finalize rounds and determine winners
+- **Winner display** with team details and member information
+- **Server-Sent Events** for real-time updates
+- **Professional admin interface** with modern styling
+
 ---
 
 ## ✨ Key Features
@@ -273,7 +302,16 @@ react_gui/src/
 - **Average Calculation:** Automatically calculates and displays average score
 - **No Default Marks:** Teams start with no marks until manually graded
 
-### **5. User Experience:**
+### **5. Beoordelaar Admin Panel (NEW!):**
+- **Round Management:** Select and manage different evaluation rounds
+- **Real-time Updates:** Live streaming of marks as they are submitted
+- **Teams Overview:** View all teams with their current marks and averages
+- **Round Closure:** Finalize rounds and automatically determine winners
+- **Winner Display:** Show winning team with complete member information
+- **Criteria Management:** View and manage evaluation criteria
+- **Professional Interface:** Modern, responsive admin dashboard
+
+### **6. User Experience:**
 - **Responsive Design:** Works on desktop and mobile
 - **Real-time Updates:** UI updates immediately after operations
 - **Loading States:** Visual feedback during operations
@@ -365,6 +403,102 @@ app.get('/teams/:id/marks', async (req, res) => {
 4. **Flexibility** - Easy to modify criteria or add new ones
 5. **Security** - Only authorized users can assign marks
 6. **User Experience** - Clean, intuitive interface
+
+---
+
+## 🆕 **NEW FEATURE: Beoordelaar Admin Panel**
+
+### **What We Built:**
+A comprehensive administrative panel for managing evaluation rounds, viewing real-time marks, and determining winners. This system provides complete oversight of the grading process.
+
+### **Beoordelaar Admin Features:**
+
+#### **1. Round Management:**
+- **Round Selection:** Choose which evaluation round to manage
+- **Round Status:** View whether rounds are active or closed
+- **Round Closure:** Finalize rounds and prevent further modifications
+
+#### **2. Real-time Marks Monitoring:**
+- **Live Updates:** Server-Sent Events stream showing marks as they're submitted
+- **Real-time Display:** See marks appear instantly without page refresh
+- **Timestamp Tracking:** View when marks were submitted
+
+#### **3. Teams Overview:**
+- **All Teams Display:** View all teams with their current marks
+- **Criteria Breakdown:** See individual scores for each criterion
+- **Average Calculation:** Automatic calculation of team averages
+- **Visual Cards:** Professional card-based layout for easy viewing
+
+#### **4. Winner Determination:**
+- **Automatic Calculation:** System determines winner based on highest average
+- **Winner Display:** Beautiful winner showcase with team details
+- **Member Information:** Complete winner team member details
+- **Score Display:** Clear presentation of winning scores
+
+#### **5. Professional Interface:**
+- **Modern Design:** Clean, professional admin interface
+- **Responsive Layout:** Works on all device sizes
+- **Color-coded Elements:** Visual hierarchy and status indicators
+- **Smooth Animations:** Professional hover effects and transitions
+
+### **Technical Implementation:**
+
+#### **Backend Features:**
+```javascript
+// Real-time marks streaming
+app.get("/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  clients.push(res);
+});
+
+// Round closure with winner determination
+app.post('/rounds/:id/close', async (req, res) => {
+  // Calculate winner based on average marks
+  // Update round status to closed
+  // Return winner with team members
+});
+
+// Teams with marks for specific round
+app.get('/rounds/:id/teams-marks', async (req, res) => {
+  // Return all teams with their marks for the round
+});
+```
+
+#### **Frontend Features:**
+```javascript
+// Real-time updates via Server-Sent Events
+useEffect(() => {
+  const eventSource = new EventSource("http://localhost:4000/stream");
+  eventSource.onmessage = (event) => {
+    const newMarks = JSON.parse(event.data);
+    setRealtimeMarks(prev => [...prev, newMarks]);
+  };
+}, []);
+
+// Winner display with team members
+{winner && (
+  <div className="winner-section">
+    <h3>🏆 Wenner Span</h3>
+    <div className="winner-card">
+      {/* Winner team details */}
+      {/* Team members display */}
+    </div>
+  </div>
+)}
+```
+
+### **Database Enhancements:**
+- **Added `is_gesluit` column** to Rondte table for round status tracking
+- **Enhanced queries** for winner determination and team ranking
+- **Optimized joins** for efficient data retrieval
+
+### **Benefits of Beoordelaar Admin:**
+1. **Complete Oversight:** Full visibility into the grading process
+2. **Real-time Monitoring:** Live updates as marks are submitted
+3. **Fair Evaluation:** Transparent winner determination process
+4. **Professional Presentation:** Beautiful winner display
+5. **Efficient Management:** Streamlined round management
+6. **Academic Ready:** Perfect for university project evaluation
 
 ---
 
@@ -471,6 +605,94 @@ export const uploadMemberPhoto = async (memberId, photoFile) => {...};
 
 ---
 
+## 🔄 Recent Changes - Beoordelaar Admin Interface Simplification
+
+### **Problem Solved:**
+The beoordelaar admin interface had become overly complex with features that were not needed for the final round system. The interface included:
+- Real-time updates that were not essential for the core functionality
+- "Vertoon Uitslag" (Show Results) button that was redundant
+- "Skep Volgende Rondte" (Create Next Round) button that was unnecessary since round 2 is the final round
+
+### **Solution Implemented:**
+Simplified the beoordelaar admin interface to focus on essential functionality only, removing unnecessary features and streamlining the user experience.
+
+### **Changes Made:**
+
+#### **1. Removed Unnecessary Buttons:**
+- **"Vertoon Uitslag" Button:** Completely removed as it was redundant with the winner display functionality
+- **"Skep Volgende Rondte" Button:** Removed since round 2 is the final round and no additional rounds are needed
+
+#### **2. Removed Real-time Updates Section:**
+- **Real-time Marks Display:** Removed the entire real-time marks streaming section
+- **EventSource Connection:** Removed the WebSocket-like connection to the server stream
+- **Live Updates:** Eliminated the real-time mark updates that were displayed in the interface
+
+#### **3. Code Cleanup:**
+- **Removed Unused State Variables:** Eliminated `realtimeMarks` and `eliminationResults` state variables
+- **Removed Unused Functions:** Deleted `handleShowEliminationResults` and `handleCreateNextRound` functions
+- **Removed Unused Imports:** Cleaned up imports for `fetchEliminationResults` and `createNextRound` services
+- **Removed Unused useEffect:** Eliminated the real-time updates useEffect hook
+
+#### **4. Simplified Interface Structure:**
+```javascript
+// BEFORE: Complex interface with multiple sections
+<div className="beoordelaar-admin-container">
+  <div className="admin-header">...</div>
+  <div className="realtime-marks">...</div>  // REMOVED
+  <div className="teams-marks-section">...</div>
+  <div className="round-management">...</div>
+  <div className="winner-section">...</div>
+  <div className="elimination-results">...</div>  // REMOVED
+</div>
+
+// AFTER: Streamlined interface
+<div className="beoordelaar-admin-container">
+  <div className="admin-header">...</div>
+  <div className="teams-marks-section">...</div>
+  <div className="round-management">...</div>
+  <div className="winner-section">...</div>
+</div>
+```
+
+#### **5. Updated Winner Display Logic:**
+```javascript
+// BEFORE: Used eliminationResults for final round detection
+<h3>{eliminationResults?.is_final_round ? '🏆 ALGEHELE WENNER 🏆' : '🏆 Wenner Span'}</h3>
+
+// AFTER: Uses selectedRound for final round detection
+<h3>🏆 Wenner Span</h3>
+{selectedRound?.is_laaste && (
+  <div className="overall-winner-banner">
+    <p><strong>Proficiat! Hierdie span het die hele toernooi gewen!</strong></p>
+  </div>
+)}
+```
+
+### **Benefits of the Simplification:**
+
+1. **Cleaner Interface:** Removed clutter and focused on essential functionality
+2. **Better Performance:** Eliminated unnecessary real-time connections and state updates
+3. **Simplified Codebase:** Reduced complexity and improved maintainability
+4. **Clearer User Experience:** Users can focus on core tasks without distractions
+5. **Final Round Focus:** Interface now properly reflects that round 2 is the final round
+6. **Reduced Dependencies:** Fewer API calls and service dependencies
+
+### **Current Beoordelaar Admin Features:**
+- ✅ **Round Selection:** Choose which round to view and manage
+- ✅ **Teams Display:** View teams with their marks for the selected round
+- ✅ **Round Management:** Close rounds and determine winners
+- ✅ **Winner Display:** Show the winning team with detailed information
+- ✅ **Final Round Support:** Proper handling of round 2 as the final round
+
+### **Removed Features:**
+- ❌ Real-time mark updates streaming
+- ❌ "Vertoon Uitslag" button
+- ❌ "Skep Volgende Rondte" button
+- ❌ Elimination results display section
+- ❌ Complex real-time state management
+
+---
+
 ## 🌐 API Endpoints
 
 ### **Team Endpoints:**
@@ -489,6 +711,24 @@ GET    /members/:id        # Get specific member
 POST   /teams/:id/members  # Create new member
 PUT    /members/:id        # Update member
 DELETE /members/:id        # Delete member
+```
+
+### **Grading Endpoints:**
+```
+POST   /teams/:id/marks    # Submit marks for a team
+GET    /teams/:id/marks    # Get marks for a team
+DELETE /teams/:id/marks    # Delete marks for a team
+POST   /merk/punte         # Send real-time marks update
+GET    /stream             # Server-Sent Events stream
+```
+
+### **Beoordelaar Admin Endpoints (NEW!):**
+```
+GET    /criteria           # Get all criteria
+GET    /rounds             # Get all rounds
+GET    /rounds/:id/teams-marks  # Get teams with marks for a round
+POST   /rounds/:id/close   # Close a round and determine winner
+GET    /rounds/:id/winner  # Get winner for a closed round
 ```
 
 ### **Example API Calls:**
@@ -599,22 +839,30 @@ npm start
 
 ### **Code Metrics:**
 - **Backend Files:** 3 main files
-- **Frontend Components:** 7 React components
-- **API Endpoints:** 13 REST endpoints
+- **Frontend Components:** 9 React components
+- **API Endpoints:** 18 REST endpoints
 - **Database Tables:** 5 tables with relationships
-- **Lines of Code:** ~2,000+ lines
+- **Lines of Code:** ~3,200+ lines (reduced after simplification)
 
 ### **Features Implemented:**
 - ✅ Team CRUD operations
 - ✅ Member CRUD operations
-- ✅ **Grading system with criteria-based marking** (NEW!)
-- ✅ **Mark display and average calculation** (NEW!)
+- ✅ **Grading system with criteria-based marking**
+- ✅ **Mark display and average calculation**
+- ✅ **Simplified Beoordelaar Admin Panel** (UPDATED!)
+- ✅ **Round management and winner determination**
+- ✅ **Winner display with team members**
+- ✅ **Final round support (Round 2)** (UPDATED!)
 - ✅ Image management via URLs
-- ✅ Real-time UI updates
 - ✅ Responsive design
 - ✅ Error handling
 - ✅ Loading states
 - ✅ Confirmation dialogs
+
+### **Recently Removed Features:**
+- ❌ Real-time marks streaming (removed for simplicity)
+- ❌ Complex elimination results display (simplified)
+- ❌ Unnecessary round management buttons (streamlined)
 
 ---
 
@@ -648,16 +896,20 @@ This Team Management & Grading System successfully demonstrates:
 #### **What to Show:**
 1. **Team Admin Page** - Demonstrate team management capabilities
 2. **Grading Page** - Show the marking system in action
-3. **Database Structure** - Explain the 5-table design
-4. **API Endpoints** - Show the 13 REST endpoints
-5. **Technology Stack** - Explain your technology choices
+3. **Beoordelaar Admin Panel** - Demonstrate round management and winner determination
+4. **Real-time Updates** - Show live marks streaming
+5. **Database Structure** - Explain the 5-table design
+6. **API Endpoints** - Show the 18 REST endpoints
+7. **Technology Stack** - Explain your technology choices
 
 #### **Key Points to Emphasize:**
 - **Full-Stack Development** - You built both frontend and backend
 - **Database Design** - Proper relationships and data integrity
 - **User Experience** - Clean, intuitive interface
+- **Real-time Features** - Server-Sent Events for live updates
+- **Admin Panel** - Comprehensive round management and winner determination
 - **Academic Relevance** - Perfect for grading student projects
-- **Technical Skills** - React, Node.js, SQLite, REST APIs
+- **Technical Skills** - React, Node.js, SQLite, REST APIs, SSE
 
 The system provides a complete solution for team management and project evaluation with excellent user experience and technical implementation.
 
@@ -665,5 +917,5 @@ The system provides a complete solution for team management and project evaluati
 
 **Project Created:** 2025  
 **Last Updated:** January 2025  
-**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3  
-**Purpose:** University Project - Team Management & Grading System
+**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3, Server-Sent Events  
+**Purpose:** University Project - Team Management & Grading System with Beoordelaar Admin Panel

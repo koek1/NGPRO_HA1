@@ -52,6 +52,7 @@ function initializeDatabase() {
                     rondte_id INTEGER PRIMARY KEY,
                     is_eerste INTEGER NOT NULL DEFAULT 0,
                     is_laaste INTEGER NOT NULL DEFAULT 0,
+                    is_gesluit INTEGER NOT NULL DEFAULT 0,
                     max_spanne REAL NOT NULL 
                 )
             `);
@@ -129,10 +130,39 @@ function initializeDatabase() {
 
             // Insert first and only round data for Rondte table
             db.run(`
-                INSERT OR IGNORE INTO Rondte (rondte_id, is_eerste, is_laaste, max_spanne) 
+                INSERT OR IGNORE INTO Rondte (rondte_id, is_eerste, is_laaste, is_gesluit, max_spanne) 
                 VALUES 
-                (1, 1, 1, 100)
+                (1, 1, 1, 0, 100)
             `);
+
+            // Check if is_gesluit column exists after table creation, if not add it
+            db.all("PRAGMA table_info(Rondte)", (err, columns) => {
+                if (err) {
+                    console.log('Error getting table columns:', err.message);
+                } else {
+                    const hasIsGesluit = columns.some(col => col.name === 'is_gesluit');
+                    if (!hasIsGesluit) {
+                        console.log('Adding is_gesluit column to existing table...');
+                        db.run(`ALTER TABLE Rondte ADD COLUMN is_gesluit INTEGER NOT NULL DEFAULT 0`, (alterErr) => {
+                            if (alterErr) {
+                                console.log('Error adding is_gesluit column:', alterErr.message);
+                            } else {
+                                console.log('is_gesluit column added successfully');
+                                // Update existing records to have is_gesluit = 0
+                                db.run('UPDATE Rondte SET is_gesluit = 0 WHERE is_gesluit IS NULL', (updateErr) => {
+                                    if (updateErr) {
+                                        console.log('Error updating existing records:', updateErr.message);
+                                    } else {
+                                        console.log('Existing records updated with is_gesluit = 0');
+                                    }
+                                });
+                            }
+                        });
+                    } else {
+                        console.log('is_gesluit column already exists');
+                    }
+                }
+            });
 
             db.close((err) => {
                 if (err) return reject(err);

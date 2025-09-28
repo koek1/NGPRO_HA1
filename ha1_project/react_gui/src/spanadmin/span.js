@@ -1,28 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { fetchTeamMarks } from '../services/span_services';
+import React from 'react';
 import './span.css';
 
 function Span({ team, members, loading, error }) {
-  const [marks, setMarks] = useState(null);
-
-  // Load marks when team changes
-  useEffect(() => {
-    const loadMarks = async () => {
-      if (team && team.span_id) {
-        try {
-          const marksData = await fetchTeamMarks(team.span_id);
-          setMarks(marksData);
-        } catch (error) {
-          console.error('Error loading marks:', error);
-          setMarks(null);
-        }
-      } else {
-        setMarks(null);
-      }
-    };
-
-    loadMarks();
-  }, [team]);
   if (loading) {
     return (
       <div className="span-container">
@@ -64,30 +43,6 @@ function Span({ team, members, loading, error }) {
             </div>
           </div>
 
-          {marks && marks.has_marks && (
-            <div className="marks-section">
-              <h3>Span Punte</h3>
-              <div className="marks-display">
-                <div className="marks-grid">
-                  <div className="mark-item">
-                    <span className="mark-label">Backend Development:</span>
-                    <span className="mark-value">{marks.marks.kriteria1}/100</span>
-                  </div>
-                  <div className="mark-item">
-                    <span className="mark-label">Frontend Development:</span>
-                    <span className="mark-value">{marks.marks.kriteria2}/100</span>
-                  </div>
-                  <div className="mark-item">
-                    <span className="mark-label">Database Design:</span>
-                    <span className="mark-value">{marks.marks.kriteria3}/100</span>
-                  </div>
-                </div>
-                <div className="total-marks">
-                  <strong>Totaal: {Math.round((marks.marks.kriteria1 + marks.marks.kriteria2 + marks.marks.kriteria3) / 3)}/100</strong>
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="members-section">
             <h3>Span Lede ({members.length})</h3>

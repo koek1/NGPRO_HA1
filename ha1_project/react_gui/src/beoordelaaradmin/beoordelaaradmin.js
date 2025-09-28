@@ -11,6 +11,7 @@ function BeoordelaarAdmin() {
   const [winner, setWinner] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   // Load initial data
   useEffect(() => {
@@ -57,6 +58,23 @@ function BeoordelaarAdmin() {
     loadTeamsWithMarks();
   }, [selectedRound]);
 
+  // Auto-refresh teams with marks every 30 seconds
+  useEffect(() => {
+    if (!selectedRound) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const teamsData = await fetchTeamsWithMarks(selectedRound.rondte_id);
+        setTeamsWithMarks(teamsData);
+        setLastUpdated(new Date());
+      } catch (err) {
+        console.error('Auto-refresh error:', err);
+      }
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [selectedRound]);
+
 
   const handleRoundSelect = (roundId) => {
     const round = rounds.find(r => r.rondte_id === roundId);
@@ -80,7 +98,7 @@ function BeoordelaarAdmin() {
         
         let eliminationMsg;
         if (result.is_final_round && result.overall_winner) {
-          eliminationMsg = `🏆 FINALE RONDTE GESLUIT! 🏆\n\nAlgehele wenner: ${result.overall_winner.naam}\nGemiddeld punt: ${Math.round(result.overall_winner.gemiddeld_punt || 0)}/100\n\nProficiat aan die wenner span!`;
+          eliminationMsg = `FINALE RONDTE GESLUIT!\n\nAlgehele wenner: ${result.overall_winner.naam}\nGemiddeld punt: ${Math.round(result.overall_winner.gemiddeld_punt || 0)}/100\n\nProficiat aan die wenner span!`;
         } else if (result.elimination_summary) {
           eliminationMsg = `Rondte gesluit! ${result.elimination_summary.eliminated_count} spanne uitgeskakel, ${result.elimination_summary.remaining_count} spanne gaan voort.`;
         } else {
@@ -113,9 +131,34 @@ function BeoordelaarAdmin() {
     }
   };
 
+  const handleRefreshData = async () => {
+    setLoading(true);
+    try {
+      const [criteriaData, roundsData] = await Promise.all([
+        fetchCriteria(),
+        fetchRounds()
+      ]);
+      setCriteria(criteriaData);
+      setRounds(roundsData);
+      
+      // Reload teams with marks for current round
+      if (selectedRound) {
+        const teamsData = await fetchTeamsWithMarks(selectedRound.rondte_id);
+        setTeamsWithMarks(teamsData);
+        setLastUpdated(new Date());
+      }
+      
+      setError(null);
+    } catch (err) {
+      setError('Kon nie data herlaai nie: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const getCriteriaName = (criteriaId) => {
-    const crit = criteria.find(c => c.kriteria_id === criteriaId);
+    const crit = criteria.find(c => c.kriteria_id === parseInt(criteriaId));
     return crit ? crit.beskrywing : `Kriteria ${criteriaId}`;
   };
 
@@ -168,10 +211,27 @@ function BeoordelaarAdmin() {
         {/* Teams with Marks Display */}
         {selectedRound && (
           <div className="teams-marks-section">
-            <h3>Span Punte vir Rondte {selectedRound.rondte_id}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h3>Span Punte vir Rondte {selectedRound.rondte_id}</h3>
+                {lastUpdated && (
+                  <small style={{ color: '#666', fontSize: '0.8em' }}>
+                    Laaste opdatering: {lastUpdated.toLocaleTimeString()}
+                  </small>
+                )}
+              </div>
+              <button 
+                onClick={handleRefreshData}
+                className="btn btn-secondary"
+                disabled={loading}
+                style={{ fontSize: '0.9em', padding: '8px 16px' }}
+              >
+                Herlaai
+              </button>
+            </div>
             {selectedRound.rondte_id > 1 && (
               <div className="round-info-banner">
-                <p><strong>⚠️ Let op:</strong> Hierdie rondte toon slegs spanne wat nie in die vorige rondte uitgeskakel is nie.</p>
+                <p><strong>Let op:</strong> Hierdie rondte toon slegs spanne wat nie in die vorige rondte uitgeskakel is nie.</p>
               </div>
             )}
             <div className="teams-grid">
@@ -191,11 +251,11 @@ function BeoordelaarAdmin() {
                     {Object.entries(team.marks).map(([criteriaId, mark]) => (
                       <div key={criteriaId} className="mark-item">
                         <span className="criteria-name">{getCriteriaName(parseInt(criteriaId))}:</span>
-                        <span className="mark-value">{mark}/100</span>
+                        <span className="mark-value">{mark || 0}</span>
                       </div>
                     ))}
                     <div className="average-mark">
-                      <strong>Gemiddeld: {calculateAverageMark(team.marks)}/100</strong>
+                      <strong>Gemiddeld: {calculateAverageMark(team.marks)}</strong>
                     </div>
                   </div>
                 </div>
@@ -223,6 +283,14 @@ function BeoordelaarAdmin() {
               <p><strong>Is Final Round:</strong> {selectedRound.is_laaste ? 'Yes' : 'No'}</p>
             </div>
             <div className="round-actions">
+              <button 
+                onClick={handleRefreshData}
+                className="btn btn-secondary"
+                disabled={loading}
+                style={{ marginRight: '10px' }}
+              >
+                Herlaai Data
+              </button>
               {!selectedRound.is_gesluit ? (
                 <button 
                   onClick={handleCloseRound}
@@ -252,13 +320,10 @@ function BeoordelaarAdmin() {
         {/* Winner Display */}
         {winner && (
           <div className="winner-section">
-            <h3>🏆 Wenner Span</h3>
+            <h3>Wenner Span</h3>
             {selectedRound?.is_laaste && (
               <div className="overall-winner-banner">
-                <p><strong>Proficiat! Hierdie span het die hele toernooi gewen!</strong></p>
-                {selectedRound?.rondte_id === 2 && (
-                  <p><strong>Rondte 2 Wenner uit 5 spanne!</strong></p>
-                )}
+                <p><strong>Die rondte wenner is: {winner.naam}</strong></p>
               </div>
             )}
             <div className="winner-card">

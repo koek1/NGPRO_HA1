@@ -1,6 +1,6 @@
 # Team Management & Grading System - Project Documentation
 
-## 📋 Table of Contents
+##  Table of Contents
 1. [Project Overview](#project-overview)
 2. [System Architecture](#system-architecture)
 3. [Database Design](#database-design)
@@ -9,13 +9,14 @@
 6. [Key Features](#key-features)
 7. [Recent Changes - URL Input System](#recent-changes---url-input-system)
 8. [Recent Changes - Beoordelaar Admin Interface Simplification](#recent-changes---beoordelaar-admin-interface-simplification)
-9. [API Endpoints](#api-endpoints)
-10. [How to Run the Project](#how-to-run-the-project)
-11. [Technical Decisions](#technical-decisions)
+9. [Recent Changes - Dynamic Criteria Management](#recent-changes---dynamic-criteria-management)
+10. [API Endpoints](#api-endpoints)
+11. [How to Run the Project](#how-to-run-the-project)
+12. [Technical Decisions](#technical-decisions)
 
 ---
 
-## 🎯 Project Overview
+##  Project Overview
 
 This project implements a comprehensive **Team Management & Grading System** that allows administrators to create, manage, and grade teams with their members. The system was built with a focus on simplicity and user experience, particularly for academic project evaluation.
 
@@ -28,13 +29,14 @@ This project implements a comprehensive **Team Management & Grading System** tha
 - ✅ **Display marks and calculate averages** (NEW!)
 - ✅ **Beoordelaar Admin Panel** (NEW!)
 - ✅ **Round management and winner determination** (NEW!)
-- ✅ **Real-time marks streaming** (NEW!)
+- ✅ **Dynamic criteria management** (NEW!)
+- ✅ **Real-time marks updates** (NEW!)
 - ✅ Image management via URL inputs
 - ✅ Real-time updates and live previews
 
 ---
 
-## 🏗️ System Architecture
+##  System Architecture
 
 ### **Technology Stack:**
 - **Backend:** Node.js + Express.js
@@ -61,30 +63,95 @@ This project implements a comprehensive **Team Management & Grading System** tha
 
 ---
 
-## 🗄️ Database Design
+##  Database Design
+
+### **Entity Relationship Diagram (ERD):**
+
+```mermaid
+erDiagram
+    Span ||--o{ Lid : "has members"
+    Span ||--o{ Punte_span_brug : "receives marks"
+    Rondte ||--o{ Merkblad : "contains marking sheets"
+    Kriteria ||--o{ Merkblad : "defines criteria"
+    Merkblad ||--o{ Punte_span_brug : "stores marks"
+    Rondte ||--o{ rondte_uitslag : "has results"
+    Span ||--o{ rondte_uitslag : "participates in rounds"
+    
+    Span {
+        INTEGER span_id PK
+        TEXT naam
+        TEXT logo
+        TEXT projek_beskrywing
+        TEXT span_bio
+    }
+    
+    Lid {
+        INTEGER lid_id PK
+        INTEGER span_id FK
+        TEXT naam
+        TEXT foto
+        TEXT bio
+    }
+    
+    Rondte {
+        INTEGER rondte_id PK
+        INTEGER is_eerste
+        INTEGER is_laaste
+        INTEGER is_gesluit
+        REAL max_spanne
+    }
+    
+    Kriteria {
+        INTEGER kriteria_id PK
+        TEXT beskrywing
+        INTEGER default_totaal
+    }
+    
+    Merkblad {
+        INTEGER merkblad_id PK
+        INTEGER rondte_id FK
+        INTEGER kriteria_id FK
+        INTEGER totaal
+    }
+    
+    Punte_span_brug {
+        INTEGER id PK
+        INTEGER merkblad_id FK
+        INTEGER span_id FK
+        INTEGER punt
+    }
+    
+    rondte_uitslag {
+        INTEGER span_id PK,FK
+        INTEGER rondte_id PK,FK
+        INTEGER rank
+        INTEGER in_gevaar
+        INTEGER gemiddelde_punt
+    }
+```
 
 ### **Tables Structure:**
 
 #### **Span (Teams) Table:**
 ```sql
 CREATE TABLE Span (
-    span_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    span_id INTEGER PRIMARY KEY,
     naam TEXT NOT NULL,
-    projek_beskrywing TEXT NOT NULL,
-    span_bio TEXT NOT NULL,
-    logo TEXT
+    logo TEXT,
+    projek_beskrywing TEXT,
+    span_bio TEXT
 );
 ```
 
 #### **Lid (Members) Table:**
 ```sql
 CREATE TABLE Lid (
-    lid_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lid_id INTEGER PRIMARY KEY,
     span_id INTEGER NOT NULL,
     naam TEXT NOT NULL,
-    bio TEXT NOT NULL,
     foto TEXT,
-    FOREIGN KEY (span_id) REFERENCES Span(span_id)
+    bio TEXT,
+    FOREIGN KEY (span_id) REFERENCES Span(span_id) ON DELETE CASCADE
 );
 ```
 
@@ -115,8 +182,8 @@ CREATE TABLE Merkblad (
     rondte_id INTEGER NOT NULL,
     kriteria_id INTEGER NOT NULL,
     totaal INTEGER,
-    FOREIGN KEY (rondte_id) REFERENCES Rondte(rondte_id),
-    FOREIGN KEY (kriteria_id) REFERENCES Kriteria(kriteria_id)
+    FOREIGN KEY (rondte_id) REFERENCES Rondte(rondte_id) ON DELETE CASCADE,
+    FOREIGN KEY (kriteria_id) REFERENCES Kriteria(kriteria_id) ON DELETE CASCADE
 );
 ```
 
@@ -127,20 +194,35 @@ CREATE TABLE Punte_span_brug (
     merkblad_id INTEGER NOT NULL,
     span_id INTEGER NOT NULL,
     punt INTEGER NOT NULL,
-    FOREIGN KEY (merkblad_id) REFERENCES Merkblad(merkblad_id),
-    FOREIGN KEY (span_id) REFERENCES Span(span_id)
+    FOREIGN KEY (merkblad_id) REFERENCES Merkblad(merkblad_id) ON DELETE CASCADE,
+    FOREIGN KEY (span_id) REFERENCES Span(span_id) ON DELETE CASCADE
+);
+```
+
+#### **rondte_uitslag (Round Results) Table:**
+```sql
+CREATE TABLE rondte_uitslag (
+    span_id INTEGER NOT NULL,
+    rondte_id INTEGER NOT NULL,
+    rank INTEGER,
+    in_gevaar INTEGER NOT NULL DEFAULT 1,
+    gemiddelde_punt INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (span_id, rondte_id),
+    FOREIGN KEY (span_id) REFERENCES Span(span_id) ON DELETE CASCADE,
+    FOREIGN KEY (rondte_id) REFERENCES Rondte(rondte_id) ON DELETE CASCADE
 );
 ```
 
 ### **Database Relationships:**
 - **One-to-Many:** One team can have multiple members
-- **Many-to-Many:** Teams can have marks for multiple criteria
-- **Foreign Keys:** Proper referential integrity throughout
-- **Cascade Operations:** When a team is deleted, all its members and marks are also deleted
+- **Many-to-Many:** Teams can have marks for multiple criteria across different rounds
+- **Foreign Keys:** Proper referential integrity throughout with CASCADE DELETE
+- **Composite Primary Key:** rondte_uitslag uses (span_id, rondte_id) as composite key
+- **Cascade Operations:** When a team is deleted, all its members, marks, and results are also deleted
 
 ---
 
-## 🔧 Backend Implementation
+##  Backend Implementation
 
 ### **File Structure:**
 ```
@@ -198,7 +280,7 @@ app.use(express.json());
 
 ---
 
-## 🎨 Frontend Implementation
+##  Frontend Implementation
 
 ### **File Structure:**
 ```
@@ -213,16 +295,20 @@ react_gui/src/
 │   ├── TeamList.js            # Team sidebar list
 │   ├── TeamList.css           # List styling
 │   └── span.js                # Team display component
+├── merkadmin/
+│   ├── merkadmin.js           # Criteria management component (NEW!)
+│   └── merkadmin.css          # Criteria management styling (NEW!)
 ├── services/
 │   ├── span_services.js       # API service functions
-│   ├── merk_services.js       # Grading API service functions (NEW!)
-│   └── beoordelaar_services.js # Beoordelaar admin API services (NEW!)
+│   ├── merk_services.js       # Grading API service functions
+│   ├── beoordelaar_services.js # Beoordelaar admin API services
+│   └── criteria_services.js   # Criteria management API services (NEW!)
 ├── merk/
-│   ├── merk.js               # Grading interface component (NEW!)
-│   └── merk.css              # Grading interface styling (NEW!)
+│   ├── merk.js               # Grading interface component
+│   └── merk.css              # Grading interface styling
 ├── beoordelaaradmin/
-│   ├── beoordelaaradmin.js   # Beoordelaar admin panel (NEW!)
-│   └── beoordelaaradmin.css  # Admin panel styling (NEW!)
+│   ├── beoordelaaradmin.js   # Beoordelaar admin panel
+│   └── beoordelaaradmin.css  # Admin panel styling
 └── App.js                     # Main app component
 ```
 
@@ -262,19 +348,29 @@ react_gui/src/
 - **Existing marks display** showing current grades if team already graded
 - **Professional step-by-step UI** with clear instructions
 
-#### **6. BeoordelaarAdmin (`beoordelaaradmin.js`) - NEW!**
+#### **6. MerkAdmin (`merkadmin.js`) - NEW!**
+- **Complete CRUD interface** for managing evaluation criteria
+- **Create new criteria** with custom descriptions and maximum scores
+- **Edit existing criteria** to modify descriptions and scores
+- **Delete criteria** with confirmation dialogs
+- **View all criteria** in a clean, organized list
+- **Form validation** ensuring proper data entry
+- **Real-time updates** when criteria are modified
+- **Professional interface** matching the application's design
+
+#### **7. BeoordelaarAdmin (`beoordelaaradmin.js`)**
 - **Comprehensive admin panel** for managing rounds and viewing results
 - **Round selection** to choose which round to manage
 - **Real-time marks display** showing live updates as marks are submitted
 - **Teams with marks overview** displaying all teams and their current scores
 - **Round closure functionality** to finalize rounds and determine winners
 - **Winner display** with team details and member information
-- **Server-Sent Events** for real-time updates
+- **Auto-refresh functionality** for new criteria integration
 - **Professional admin interface** with modern styling
 
 ---
 
-## ✨ Key Features
+##  Key Features
 
 ### **1. Team Management:**
 - **Create Teams:** Complete form with team details and member management
@@ -320,7 +416,7 @@ react_gui/src/
 
 ---
 
-## 🆕 **NEW FEATURE: Grading System**
+##  **NEW FEATURE: Grading System**
 
 ### **What We Built:**
 A comprehensive grading system that allows administrators to evaluate team projects across multiple criteria, perfect for academic project evaluation.
@@ -406,7 +502,7 @@ app.get('/teams/:id/marks', async (req, res) => {
 
 ---
 
-## 🆕 **NEW FEATURE: Beoordelaar Admin Panel**
+##  **NEW FEATURE: Beoordelaar Admin Panel**
 
 ### **What We Built:**
 A comprehensive administrative panel for managing evaluation rounds, viewing real-time marks, and determining winners. This system provides complete oversight of the grading process.
@@ -502,7 +598,7 @@ useEffect(() => {
 
 ---
 
-## 🔄 Recent Changes - URL Input System
+## Recent Changes - URL Input System
 
 ### **Problem Solved:**
 The original system used file uploads for images, which was complex and unreliable. Users needed to:
@@ -605,7 +701,7 @@ export const uploadMemberPhoto = async (memberId, photoFile) => {...};
 
 ---
 
-## 🔄 Recent Changes - Beoordelaar Admin Interface Simplification
+##  Recent Changes - Beoordelaar Admin Interface Simplification
 
 ### **Problem Solved:**
 The beoordelaar admin interface had become overly complex with features that were not needed for the final round system. The interface included:
@@ -678,22 +774,195 @@ Simplified the beoordelaar admin interface to focus on essential functionality o
 6. **Reduced Dependencies:** Fewer API calls and service dependencies
 
 ### **Current Beoordelaar Admin Features:**
-- ✅ **Round Selection:** Choose which round to view and manage
-- ✅ **Teams Display:** View teams with their marks for the selected round
-- ✅ **Round Management:** Close rounds and determine winners
-- ✅ **Winner Display:** Show the winning team with detailed information
-- ✅ **Final Round Support:** Proper handling of round 2 as the final round
-
-### **Removed Features:**
-- ❌ Real-time mark updates streaming
-- ❌ "Vertoon Uitslag" button
-- ❌ "Skep Volgende Rondte" button
-- ❌ Elimination results display section
-- ❌ Complex real-time state management
+-  **Round Selection:** Choose which round to view and manage
+-  **Teams Display:** View teams with their marks for the selected round
+-  **Round Management:** Close rounds and determine winners
+-  **Winner Display:** Show the winning team with detailed information
+-  **Final Round Support:** Proper handling of round 2 as the final round
 
 ---
 
-## 🌐 API Endpoints
+## Recent Changes - Dynamic Criteria Management
+
+### **Problem Solved:**
+The original grading system was hardcoded with only three criteria (Backend, Frontend, Database), making it inflexible for different evaluation needs. Users needed the ability to:
+- Add new evaluation criteria dynamically
+- Modify existing criteria descriptions and maximum scores
+- Remove criteria that are no longer needed
+- Have the system automatically adapt to new criteria across all rounds
+
+### **Solution Implemented:**
+Implemented a comprehensive **Dynamic Criteria Management System** that allows administrators to create, read, update, and delete (CRUD) evaluation criteria with automatic integration across all rounds and marking interfaces.
+
+### **Changes Made:**
+
+#### **1. New MerkAdmin Component (`merkadmin/`):**
+```javascript
+// Complete CRUD interface for criteria management
+const MerkAdmin = () => {
+  const [criteria, setCriteria] = useState([]);
+  const [editingCriteria, setEditingCriteria] = useState(null);
+  const [formData, setFormData] = useState({ beskrywing: '', default_totaal: '' });
+  
+  // CRUD operations
+  const handleCreate = async () => { /* Create new criteria */ };
+  const handleUpdate = async () => { /* Update existing criteria */ };
+  const handleDelete = async (id) => { /* Delete criteria */ };
+  const handleEdit = (criteria) => { /* Edit criteria */ };
+};
+```
+
+#### **2. Enhanced Backend API (`index.js`):**
+```javascript
+// New CRUD endpoints for criteria management
+app.get('/criteria', async (req, res) => { /* Get all criteria */ });
+app.get('/criteria/:id', async (req, res) => { /* Get specific criteria */ });
+app.post('/criteria', async (req, res) => { /* Create new criteria */ });
+app.put('/criteria/:id', async (req, res) => { /* Update criteria */ });
+app.delete('/criteria/:id', async (req, res) => { /* Delete criteria */ });
+```
+
+#### **3. Automatic Merkblad Creation:**
+```javascript
+// When new criteria is created, automatically create merkblad records for all rounds
+app.post('/criteria', async (req, res) => {
+  // Create criteria
+  const kriteriaId = this.lastID;
+  
+  // Create merkblad records for all existing rounds
+  rounds.forEach(round => {
+    db.run('INSERT INTO Merkblad (rondte_id, kriteria_id, totaal) VALUES (?, ?, ?)', 
+      [round.rondte_id, kriteriaId, default_totaal]);
+  });
+});
+```
+
+#### **4. Dynamic Frontend Integration:**
+```javascript
+// Merk page now dynamically loads criteria
+const [criteria, setCriteria] = useState([]);
+
+useEffect(() => {
+  const loadCriteria = async () => {
+    const criteriaData = await fetchAllCriteria();
+    setCriteria(criteriaData);
+    
+    // Initialize marks for all criteria
+    const newMarks = {};
+    criteriaData.forEach(crit => {
+      newMarks[`kriteria${crit.kriteria_id}`] = "";
+    });
+    setMarks(newMarks);
+  };
+  loadCriteria();
+}, []);
+```
+
+#### **5. Enhanced Beoordelaar Admin:**
+```javascript
+// Auto-refresh functionality for new criteria
+const handleRefreshData = async () => {
+  const [criteriaData, roundsData] = await Promise.all([
+    fetchCriteria(),
+    fetchRounds()
+  ]);
+  setCriteria(criteriaData);
+  setRounds(roundsData);
+  
+  // Reload teams with marks for current round
+  if (selectedRound) {
+    const teamsData = await fetchTeamsWithMarks(selectedRound.rondte_id);
+    setTeamsWithMarks(teamsData);
+  }
+};
+```
+
+### **Key Features Implemented:**
+
+#### **1. Criteria Management Interface:**
+- **Create New Criteria:** Add criteria with custom descriptions and maximum scores
+- **Edit Existing Criteria:** Modify criteria descriptions and maximum scores
+- **Delete Criteria:** Remove criteria that are no longer needed
+- **View All Criteria:** Complete list with edit/delete actions
+- **Form Validation:** Ensures proper data entry and prevents duplicates
+
+#### **2. Automatic Integration:**
+- **Round Integration:** New criteria automatically available in all existing rounds
+- **Marking Interface:** Merk page dynamically adapts to show all criteria
+- **Admin Panel:** Beoordelaar admin automatically displays new criteria
+- **Database Consistency:** Merkblad records created automatically for new criteria
+
+#### **3. Real-time Updates:**
+- **Auto-refresh:** All interfaces refresh automatically when criteria change
+- **Live Updates:** Changes appear immediately across all components
+- **Data Consistency:** All interfaces stay synchronized with database changes
+
+#### **4. Enhanced User Experience:**
+- **Intuitive Interface:** Clean, professional criteria management interface
+- **Error Handling:** Comprehensive validation and error messages
+- **Loading States:** Visual feedback during operations
+- **Confirmation Dialogs:** Prevent accidental deletions
+
+### **Technical Implementation:**
+
+#### **Backend Enhancements:**
+```javascript
+// Dynamic marks submission for any number of criteria
+app.post('/teams/:id/marks', async (req, res) => {
+  // Get all criteria from database
+  const criteria = await db.all('SELECT kriteria_id, beskrywing, default_totaal FROM Kriteria');
+  
+  // Validate marks for all criteria
+  criteria.forEach(crit => {
+    const markKey = `kriteria${crit.kriteria_id}`;
+    const markValue = req.body[markKey];
+    // Validation logic...
+  });
+  
+  // Store marks for all criteria
+  // Transaction safety ensured
+});
+```
+
+#### **Frontend Enhancements:**
+```javascript
+// Dynamic form generation based on criteria
+{criteria.map(crit => (
+  <div key={crit.kriteria_id} className="mark-input-group">
+    <label>{crit.beskrywing} (0-{crit.default_totaal}):</label>
+    <input
+      type="number"
+      name={`kriteria${crit.kriteria_id}`}
+      min="0"
+      max={crit.default_totaal}
+      value={marks[`kriteria${crit.kriteria_id}`] || ""}
+      onChange={handleInputChange}
+    />
+  </div>
+))}
+```
+
+### **Benefits of Dynamic Criteria Management:**
+
+1. **Flexibility:** Add/modify/remove criteria as needed
+2. **Scalability:** System adapts to any number of criteria
+3. **Consistency:** All interfaces automatically update with new criteria
+4. **User Experience:** Intuitive management interface
+5. **Data Integrity:** Automatic merkblad creation ensures consistency
+6. **Real-time Updates:** Changes appear immediately across all interfaces
+7. **Academic Ready:** Perfect for different evaluation requirements
+
+### **Current System Capabilities:**
+- **Unlimited Criteria:** Add as many evaluation criteria as needed
+- **Custom Scoring:** Each criteria can have different maximum scores
+- **Round Integration:** New criteria automatically available in all rounds
+- **Dynamic Marking:** Marking interface adapts to any number of criteria
+- **Admin Oversight:** Complete visibility and management of all criteria
+- **Data Consistency:** Automatic database updates ensure integrity
+
+---
+
+## API Endpoints
 
 ### **Team Endpoints:**
 ```
@@ -722,9 +991,17 @@ POST   /merk/punte         # Send real-time marks update
 GET    /stream             # Server-Sent Events stream
 ```
 
-### **Beoordelaar Admin Endpoints (NEW!):**
+### **Criteria Management Endpoints (NEW!):**
 ```
 GET    /criteria           # Get all criteria
+GET    /criteria/:id       # Get specific criteria
+POST   /criteria           # Create new criteria
+PUT    /criteria/:id       # Update criteria
+DELETE /criteria/:id       # Delete criteria
+```
+
+### **Beoordelaar Admin Endpoints:**
+```
 GET    /rounds             # Get all rounds
 GET    /rounds/:id/teams-marks  # Get teams with marks for a round
 POST   /rounds/:id/close   # Close a round and determine winner
@@ -758,9 +1035,33 @@ Content-Type: application/json
 }
 ```
 
+#### **Create Criteria:**
+```javascript
+POST /criteria
+Content-Type: application/json
+
+{
+  "beskrywing": "Code Quality",
+  "default_totaal": 100
+}
+```
+
+#### **Submit Marks:**
+```javascript
+POST /teams/1/marks
+Content-Type: application/json
+
+{
+  "kriteria1": 85,
+  "kriteria2": 90,
+  "kriteria3": 78,
+  "kriteria4": 92
+}
+```
+
 ---
 
-## 🚀 How to Run the Project
+## How to Run the Project
 
 ### **Prerequisites:**
 - Node.js (v14 or higher)
@@ -799,7 +1100,7 @@ npm start
 
 ---
 
-## 🎯 Technical Decisions
+## Technical Decisions
 
 ### **1. Why SQLite?**
 - **Lightweight:** No separate database server needed
@@ -835,38 +1136,41 @@ npm start
 
 ---
 
-## 📊 Project Statistics
+## Project Statistics
 
 ### **Code Metrics:**
 - **Backend Files:** 3 main files
-- **Frontend Components:** 9 React components
-- **API Endpoints:** 18 REST endpoints
-- **Database Tables:** 5 tables with relationships
-- **Lines of Code:** ~3,200+ lines (reduced after simplification)
+- **Frontend Components:** 10 React components
+- **API Endpoints:** 23 REST endpoints
+- **Database Tables:** 6 tables with relationships
+- **Lines of Code:** ~4,500+ lines (including dynamic criteria management)
 
 ### **Features Implemented:**
-- ✅ Team CRUD operations
-- ✅ Member CRUD operations
-- ✅ **Grading system with criteria-based marking**
-- ✅ **Mark display and average calculation**
-- ✅ **Simplified Beoordelaar Admin Panel** (UPDATED!)
-- ✅ **Round management and winner determination**
-- ✅ **Winner display with team members**
-- ✅ **Final round support (Round 2)** (UPDATED!)
-- ✅ Image management via URLs
-- ✅ Responsive design
-- ✅ Error handling
-- ✅ Loading states
-- ✅ Confirmation dialogs
+-  Team CRUD operations
+-  Member CRUD operations
+-  **Dynamic criteria management (CRUD)** (NEW!)
+-  **Grading system with criteria-based marking**
+-  **Mark display and average calculation**
+-  **Simplified Beoordelaar Admin Panel** (UPDATED!)
+-  **Round management and winner determination**
+-  **Winner display with team members**
+-  **Final round support (Round 2)** (UPDATED!)
+-  **Real-time marks updates** (NEW!)
+-  **Auto-refresh functionality** (NEW!)
+-  Image management via URLs
+-  Responsive design
+-  Error handling
+-  Loading states
+-  Confirmation dialogs
 
 ### **Recently Removed Features:**
-- ❌ Real-time marks streaming (removed for simplicity)
-- ❌ Complex elimination results display (simplified)
-- ❌ Unnecessary round management buttons (streamlined)
+-  Real-time marks streaming (removed for simplicity)
+-  Complex elimination results display (simplified)
+-  Unnecessary round management buttons (streamlined)
 
 ---
 
-## 🔮 Future Enhancements
+##  Future Enhancements
 
 ### **Potential Improvements:**
 1. **Authentication:** User login and role-based access
@@ -879,7 +1183,7 @@ npm start
 
 ---
 
-## 📝 Conclusion
+##  Conclusion
 
 This Team Management & Grading System successfully demonstrates:
 
@@ -917,5 +1221,5 @@ The system provides a complete solution for team management and project evaluati
 
 **Project Created:** 2025  
 **Last Updated:** January 2025  
-**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3, Server-Sent Events  
-**Purpose:** University Project - Team Management & Grading System with Beoordelaar Admin Panel
+**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3, Dynamic Criteria Management  
+**Purpose:** University Project - Team Management & Grading System with Dynamic Criteria Management

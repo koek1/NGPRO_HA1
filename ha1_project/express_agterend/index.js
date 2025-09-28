@@ -327,21 +327,8 @@ app.post('/teams/:id/marks', async (req, res) => {
       return res.status(404).json({ error: 'Span nie gevind nie' });
     }
 
-    const { kriteria1, kriteria2, kriteria3, rondteId } = req.body;
+    const { rondteId, ...marksData } = req.body;
     
-    // Validate marks are provided and are numbers
-    if (kriteria1 === undefined || kriteria2 === undefined || kriteria3 === undefined) {
-      return res.status(400).json({ 
-        error: 'Alle kriteria punte is verpligtend' 
-      });
-    }
-
-    if (isNaN(kriteria1) || isNaN(kriteria2) || isNaN(kriteria3)) {
-      return res.status(400).json({ 
-        error: 'Punte moet nommers wees' 
-      });
-    }
-
     // Use provided round ID or default to 1 for backward compatibility
     const targetRondteId = rondteId || 1;
 
@@ -350,94 +337,172 @@ app.post('/teams/:id/marks', async (req, res) => {
     const dbPath = getDatabasePath();
     const db = new sqlite3.Database(dbPath);
 
-    // Get criteria IDs for the specified round
-    const kriteriaIds = [1, 2, 3]; // Backend, Frontend, Database
-    const marks = [kriteria1, kriteria2, kriteria3];
+    // Check if the round is closed
+    db.get('SELECT is_gesluit FROM Rondte WHERE rondte_id = ?', [targetRondteId], (roundErr, round) => {
+      if (roundErr) {
+        res.status(500).json({ error: 'Kon nie rondte status kry nie', details: roundErr.message });
+        db.close();
+        return;
+      }
 
-    // Start transaction
-    db.serialize(() => {
-      db.run('BEGIN TRANSACTION');
+      if (!round) {
+        res.status(404).json({ error: 'Rondte nie gevind nie' });
+        db.close();
+        return;
+      }
 
-      // Delete existing marks for this team in this round
-      db.run('DELETE FROM Punte_span_brug WHERE span_id = ? AND merkblad_id IN (SELECT merkblad_id FROM Merkblad WHERE rondte_id = ?)', [spanId, targetRondteId], (err) => {
-        if (err) {
-          db.run('ROLLBACK');
-          res.status(500).json({ error: 'Kon nie bestaande punte verwyder nie', details: err.message });
-          db.close();
-          return;
+      if (round.is_gesluit) {
+        res.status(400).json({ error: 'Kan nie punte byvoeg vir \'n geslote rondte nie' });
+        db.close();
+        return;
+      }
+
+      // Get all criteria from the database
+      db.all('SELECT kriteria_id, beskrywing, default_totaal FROM Kriteria ORDER BY kriteria_id', (err, criteria) => {
+      if (err) {
+        res.status(500).json({ error: 'Kon nie kriteria laai nie', details: err.message });
+        db.close();
+        return;
+      }
+
+      if (criteria.length === 0) {
+        res.status(400).json({ error: 'Geen kriteria gevind nie' });
+        db.close();
+        return;
+      }
+
+      // Validate that all criteria marks are provided
+      const missingCriteria = [];
+      const invalidMarks = [];
+      const marks = [];
+
+      for (const crit of criteria) {
+        const markKey = `kriteria${crit.kriteria_id}`;
+        const markValue = marksData[markKey];
+        
+        if (markValue === undefined) {
+          missingCriteria.push(crit.beskrywing);
+        } else {
+          const numericValue = parseFloat(markValue);
+          if (isNaN(numericValue)) {
+            invalidMarks.push(crit.beskrywing);
+          } else if (numericValue < 0 || numericValue > crit.default_totaal) {
+            invalidMarks.push(`${crit.beskrywing} (moet tussen 0 en ${crit.default_totaal} wees)`);
+          } else {
+            marks.push({ kriteriaId: crit.kriteria_id, mark: numericValue });
+          }
         }
+      }
 
-        // Insert new marks
-        let completed = 0;
-        let hasError = false;
+      if (missingCriteria.length > 0) {
+        res.status(400).json({ 
+          error: `Ontbrekende kriteria punte: ${missingCriteria.join(', ')}` 
+        });
+        db.close();
+        return;
+      }
 
-        kriteriaIds.forEach((kriteriaId, index) => {
-          // Get or create merkblad for this round and criteria
-          db.get('SELECT merkblad_id FROM Merkblad WHERE rondte_id = ? AND kriteria_id = ?', [targetRondteId, kriteriaId], (err, row) => {
+      if (invalidMarks.length > 0) {
+        res.status(400).json({ 
+          error: `Ongeldige punte: ${invalidMarks.join(', ')}` 
+        });
+        db.close();
+        return;
+      }
+
+      // Process marks
+      function processMarks() {
+        // Start transaction
+        db.serialize(() => {
+          db.run('BEGIN TRANSACTION');
+
+          // Delete existing marks for this team in this round
+          db.run('DELETE FROM Punte_span_brug WHERE span_id = ? AND merkblad_id IN (SELECT merkblad_id FROM Merkblad WHERE rondte_id = ?)', [spanId, targetRondteId], (err) => {
             if (err) {
-              hasError = true;
               db.run('ROLLBACK');
-              res.status(500).json({ error: 'Kon nie merkblad kry nie', details: err.message });
+              res.status(500).json({ error: 'Kon nie bestaande punte verwyder nie', details: err.message });
               db.close();
               return;
             }
 
-            let merkbladId;
-            if (row) {
-              merkbladId = row.merkblad_id;
-              insertMark(merkbladId, marks[index]);
-            } else {
-              // Create new merkblad
-              db.run('INSERT INTO Merkblad (rondte_id, kriteria_id, totaal) VALUES (?, ?, 100)', [targetRondteId, kriteriaId], function(err) {
-                if (err) {
-                  hasError = true;
-                  db.run('ROLLBACK');
-                  res.status(500).json({ error: 'Kon nie merkblad skep nie', details: err.message });
-                  db.close();
-                  return;
-                }
-                merkbladId = this.lastID;
-                insertMark(merkbladId, marks[index]);
-              });
-            }
+            // Insert new marks
+            let completed = 0;
+            let hasError = false;
 
-            function insertMark(merkbladId, mark) {
-              // Insert the mark
-              db.run('INSERT INTO Punte_span_brug (merkblad_id, span_id, punt) VALUES (?, ?, ?)', [merkbladId, spanId, mark], function(err) {
+            marks.forEach(({ kriteriaId, mark }) => {
+              // Get or create merkblad for this round and criteria
+              db.get('SELECT merkblad_id FROM Merkblad WHERE rondte_id = ? AND kriteria_id = ?', [targetRondteId, kriteriaId], (err, row) => {
                 if (err) {
                   hasError = true;
                   db.run('ROLLBACK');
-                  res.status(500).json({ error: 'Kon nie punt stoor nie', details: err.message });
+                  res.status(500).json({ error: 'Kon nie merkblad kry nie', details: err.message });
                   db.close();
                   return;
                 }
 
-                completed++;
-                if (completed === kriteriaIds.length && !hasError) {
-                  db.run('COMMIT', (err) => {
+                let merkbladId;
+                if (row) {
+                  merkbladId = row.merkblad_id;
+                  insertMark(merkbladId, mark);
+                } else {
+                  // Create new merkblad with the criteria's default total
+                  const crit = criteria.find(c => c.kriteria_id === kriteriaId);
+                  db.run('INSERT INTO Merkblad (rondte_id, kriteria_id, totaal) VALUES (?, ?, ?)', [targetRondteId, kriteriaId, crit.default_totaal], function(err) {
                     if (err) {
-                      res.status(500).json({ error: 'Kon nie transaksie voltooi nie', details: err.message });
-                    } else {
-                      res.status(201).json({ 
-                        message: 'Punte suksesvol gestoor',
-                        span_id: spanId,
-                        marks: {
-                          kriteria1: kriteria1,
-                          kriteria2: kriteria2,
-                          kriteria3: kriteria3
+                      hasError = true;
+                      db.run('ROLLBACK');
+                      res.status(500).json({ error: 'Kon nie merkblad skep nie', details: err.message });
+                      db.close();
+                      return;
+                    }
+                    merkbladId = this.lastID;
+                    insertMark(merkbladId, mark);
+                  });
+                }
+
+                function insertMark(merkbladId, mark) {
+                  // Insert the mark
+                  db.run('INSERT INTO Punte_span_brug (merkblad_id, span_id, punt) VALUES (?, ?, ?)', [merkbladId, spanId, mark], function(err) {
+                    if (err) {
+                      hasError = true;
+                      db.run('ROLLBACK');
+                      res.status(500).json({ error: 'Kon nie punt stoor nie', details: err.message });
+                      db.close();
+                      return;
+                    }
+
+                    completed++;
+                    if (completed === marks.length && !hasError) {
+                      db.run('COMMIT', (err) => {
+                        if (err) {
+                          res.status(500).json({ error: 'Kon nie transaksie voltooi nie', details: err.message });
+                        } else {
+                          // Build response with all submitted marks
+                          const responseMarks = {};
+                          marks.forEach(({ kriteriaId, mark }) => {
+                            responseMarks[`kriteria${kriteriaId}`] = mark;
+                          });
+                          
+                          res.status(201).json({ 
+                            message: 'Punte suksesvol gestoor',
+                            span_id: spanId,
+                            marks: responseMarks
+                          });
                         }
+                        db.close();
                       });
                     }
-                    db.close();
                   });
                 }
               });
-            }
+            });
           });
         });
+      }
+
+      processMarks();
       });
     });
-
   } catch (err) {
     res.status(500).json({ error: 'Kon nie punte stoor nie', details: err.message });
   }
@@ -470,7 +535,8 @@ app.get('/teams/:id/marks', async (req, res) => {
       SELECT 
         psb.punt,
         k.beskrywing as kriteria_naam,
-        k.kriteria_id
+        k.kriteria_id,
+        k.default_totaal
       FROM Punte_span_brug psb
       JOIN Merkblad m ON psb.merkblad_id = m.merkblad_id
       JOIN Kriteria k ON m.kriteria_id = k.kriteria_id
@@ -480,21 +546,16 @@ app.get('/teams/:id/marks', async (req, res) => {
       if (err) {
         res.status(500).json({ error: 'Kon nie punte laai nie', details: err.message });
       } else {
-        // Format the response
-        const marks = {
-          kriteria1: null,
-          kriteria2: null,
-          kriteria3: null
-        };
+        // Format the response dynamically
+        const marks = {};
+        let hasActualMarks = false;
 
         rows.forEach(row => {
-          if (row.kriteria_id === 1) marks.kriteria1 = row.punt;
-          if (row.kriteria_id === 2) marks.kriteria2 = row.punt;
-          if (row.kriteria_id === 3) marks.kriteria3 = row.punt;
+          marks[`kriteria${row.kriteria_id}`] = row.punt;
+          if (row.punt > 0) {
+            hasActualMarks = true;
+          }
         });
-
-        // Only consider it as having marks if at least one mark is greater than 0
-        const hasActualMarks = rows.length > 0 && (marks.kriteria1 > 0 || marks.kriteria2 > 0 || marks.kriteria3 > 0);
 
         res.json({
           span_id: spanId,
@@ -566,6 +627,219 @@ app.get('/criteria', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Kon nie kriteria laai nie', details: err.message });
+  }
+});
+
+// Endpoint to get a specific criteria by ID
+app.get('/criteria/:id', async (req, res) => {
+  try {
+    const kriteriaId = parseInt(req.params.id, 10);
+    if (isNaN(kriteriaId)) {
+      return res.status(400).json({ error: 'Ongeldige kriteria ID' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    db.get('SELECT * FROM Kriteria WHERE kriteria_id = ?', [kriteriaId], (err, row) => {
+      if (err) {
+        res.status(500).json({ error: 'Kon nie kriteria laai nie', details: err.message });
+      } else if (!row) {
+        res.status(404).json({ error: 'Kriteria nie gevind nie' });
+      } else {
+        res.json(row);
+      }
+      db.close();
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie kriteria laai nie', details: err.message });
+  }
+});
+
+// Endpoint to create a new criteria
+app.post('/criteria', async (req, res) => {
+  try {
+    const { beskrywing, default_totaal } = req.body;
+    
+    // Validate required fields
+    if (!beskrywing || !default_totaal) {
+      return res.status(400).json({ 
+        error: 'Beskrywing en default totaal is verpligtend' 
+      });
+    }
+
+    // Validate default_totaal is a positive number
+    const totaal = parseInt(default_totaal, 10);
+    if (isNaN(totaal) || totaal <= 0) {
+      return res.status(400).json({ 
+        error: 'Default totaal moet \'n positiewe nommer wees' 
+      });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    db.run(
+      'INSERT INTO Kriteria (beskrywing, default_totaal) VALUES (?, ?)',
+      [beskrywing.trim(), totaal],
+      function(err) {
+        if (err) {
+          res.status(500).json({ error: 'Kon nie kriteria skep nie', details: err.message });
+          db.close();
+          return;
+        }
+
+        const kriteriaId = this.lastID;
+        
+        // Create merkblad records for all existing rounds
+        db.all('SELECT rondte_id FROM Rondte', (err, rounds) => {
+          if (err) {
+            res.status(500).json({ error: 'Kon nie rondte laai nie', details: err.message });
+            db.close();
+            return;
+          }
+
+          if (rounds.length === 0) {
+            res.status(201).json({
+              kriteria_id: kriteriaId,
+              beskrywing: beskrywing.trim(),
+              default_totaal: totaal
+            });
+            db.close();
+            return;
+          }
+
+          let completed = 0;
+          let hasError = false;
+
+          rounds.forEach(round => {
+            db.run('INSERT INTO Merkblad (rondte_id, kriteria_id, totaal) VALUES (?, ?, ?)', 
+              [round.rondte_id, kriteriaId, totaal], function(err) {
+              if (err) {
+                hasError = true;
+                res.status(500).json({ error: 'Kon nie merkblad skep nie', details: err.message });
+                db.close();
+                return;
+              }
+
+              completed++;
+              if (completed === rounds.length && !hasError) {
+                res.status(201).json({
+                  kriteria_id: kriteriaId,
+                  beskrywing: beskrywing.trim(),
+                  default_totaal: totaal
+                });
+                db.close();
+              }
+            });
+          });
+        });
+      }
+    );
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie kriteria skep nie', details: err.message });
+  }
+});
+
+// Endpoint to update a criteria
+app.put('/criteria/:id', async (req, res) => {
+  try {
+    const kriteriaId = parseInt(req.params.id, 10);
+    if (isNaN(kriteriaId)) {
+      return res.status(400).json({ error: 'Ongeldige kriteria ID' });
+    }
+
+    const { beskrywing, default_totaal } = req.body;
+    
+    // Validate required fields
+    if (!beskrywing || !default_totaal) {
+      return res.status(400).json({ 
+        error: 'Beskrywing en default totaal is verpligtend' 
+      });
+    }
+
+    // Validate default_totaal is a positive number
+    const totaal = parseInt(default_totaal, 10);
+    if (isNaN(totaal) || totaal <= 0) {
+      return res.status(400).json({ 
+        error: 'Default totaal moet \'n positiewe nommer wees' 
+      });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    db.run(
+      'UPDATE Kriteria SET beskrywing = ?, default_totaal = ? WHERE kriteria_id = ?',
+      [beskrywing.trim(), totaal, kriteriaId],
+      function(err) {
+        if (err) {
+          res.status(500).json({ error: 'Kon nie kriteria opdateer nie', details: err.message });
+        } else if (this.changes === 0) {
+          res.status(404).json({ error: 'Kriteria nie gevind nie' });
+        } else {
+          res.json({
+            kriteria_id: kriteriaId,
+            beskrywing: beskrywing.trim(),
+            default_totaal: totaal
+          });
+        }
+        db.close();
+      }
+    );
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie kriteria opdateer nie', details: err.message });
+  }
+});
+
+// Endpoint to delete a criteria
+app.delete('/criteria/:id', async (req, res) => {
+  try {
+    const kriteriaId = parseInt(req.params.id, 10);
+    if (isNaN(kriteriaId)) {
+      return res.status(400).json({ error: 'Ongeldige kriteria ID' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    // Check if criteria is being used in any merkblad
+    db.get(
+      'SELECT COUNT(*) as count FROM Merkblad WHERE kriteria_id = ?',
+      [kriteriaId],
+      (err, row) => {
+        if (err) {
+          res.status(500).json({ error: 'Kon nie kriteria gebruik kontroleer nie', details: err.message });
+          db.close();
+        } else if (row.count > 0) {
+          res.status(400).json({ 
+            error: 'Kan nie kriteria verwyder nie - dit word gebruik in merkblaaie' 
+          });
+          db.close();
+        } else {
+          // Safe to delete
+          db.run('DELETE FROM Kriteria WHERE kriteria_id = ?', [kriteriaId], function(err) {
+            if (err) {
+              res.status(500).json({ error: 'Kon nie kriteria verwyder nie', details: err.message });
+            } else if (this.changes === 0) {
+              res.status(404).json({ error: 'Kriteria nie gevind nie' });
+            } else {
+              res.status(200).json({ 
+                message: 'Kriteria suksesvol verwyder',
+                kriteria_id: kriteriaId
+              });
+            }
+            db.close();
+          });
+        }
+      }
+    );
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie kriteria verwyder nie', details: err.message });
   }
 });
 
@@ -646,6 +920,7 @@ app.get('/rounds/:id/teams-marks', async (req, res) => {
           s.logo,
           k.kriteria_id,
           k.beskrywing as kriteria_naam,
+          k.default_totaal,
           COALESCE(psb.punt, 0) as punt
         FROM Span s
         CROSS JOIN Kriteria k

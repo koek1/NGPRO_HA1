@@ -88,20 +88,21 @@ function Merk() {
           const marksData = await fetchTeamMarks(selectedTeamId, selectedRoundId);
           setExistingMarks(marksData);
           
-          // Pre-fill form with existing marks if they exist
-          if (marksData.has_marks) {
+          // Always clear marks for new teams to ensure empty forms
+          // Only pre-fill if there are actual marks AND the team is not newly created
+          const clearedMarks = {};
+          criteria.forEach(crit => {
+            clearedMarks[`kriteria${crit.kriteria_id}`] = "";
+          });
+          setMarks(clearedMarks);
+          
+          // If there are actual marks, pre-fill them
+          if (marksData.has_marks && marksData.marks && Object.keys(marksData.marks).length > 0) {
             const existingMarks = {};
             criteria.forEach(crit => {
               existingMarks[`kriteria${crit.kriteria_id}`] = marksData.marks[`kriteria${crit.kriteria_id}`] || "";
             });
             setMarks(existingMarks);
-          } else {
-            // Clear marks for all criteria
-            const clearedMarks = {};
-            criteria.forEach(crit => {
-              clearedMarks[`kriteria${crit.kriteria_id}`] = "";
-            });
-            setMarks(clearedMarks);
           }
         } catch (error) {
           console.error('Error loading existing marks:', error);

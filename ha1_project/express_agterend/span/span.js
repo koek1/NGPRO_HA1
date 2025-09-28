@@ -233,20 +233,34 @@ function deleteTeam(spanId) {
             if (err) return reject(err);
         });
 
-        // First delete all members of the team (cascade delete)
-        db.run(
-            `DELETE FROM Lid WHERE span_id = ?`,
-            [spanId],
-            function(err) {
+        // Delete all related data for the team
+        db.serialize(() => {
+            // Delete all marks for this team
+            db.run(`DELETE FROM Punte_span_brug WHERE span_id = ?`, [spanId], (err) => {
                 if (err) {
                     db.close();
                     return reject(err);
                 }
-                
-                // Then delete the team
-                db.run(
-                    `DELETE FROM Span WHERE span_id = ?`,
-                    [spanId],
+            });
+            
+            // Delete all round results for this team
+            db.run(`DELETE FROM rondte_uitslag WHERE span_id = ?`, [spanId], (err) => {
+                if (err) {
+                    db.close();
+                    return reject(err);
+                }
+            });
+            
+            // Delete all members of the team
+            db.run(`DELETE FROM Lid WHERE span_id = ?`, [spanId], (err) => {
+                if (err) {
+                    db.close();
+                    return reject(err);
+                }
+            });
+            
+            // Finally delete the team itself
+            db.run(`DELETE FROM Span WHERE span_id = ?`, [spanId],
                     function(err) {
                         db.close();
                         if (err) return reject(err);

@@ -552,8 +552,10 @@ app.get('/teams/:id/marks', async (req, res) => {
 
         rows.forEach(row => {
           marks[`kriteria${row.kriteria_id}`] = row.punt;
-          // Any mark (including 0) is considered an actual mark
-          hasActualMarks = true;
+          // Only consider it an actual mark if it's greater than 0
+          if (row.punt > 0) {
+            hasActualMarks = true;
+          }
         });
 
         res.json({
@@ -822,6 +824,130 @@ app.delete('/criteria/:id', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Kon nie kriteria verwyder nie', details: err.message });
+  }
+});
+
+// Endpoint to clear database (for testing purposes)
+app.post('/admin/clear-database', async (req, res) => {
+  try {
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    console.log('🗑️  Clearing database via API...');
+
+    // Clear all data in the correct order
+    db.serialize(() => {
+      // Clear all marks first
+      db.run('DELETE FROM Punte_span_brug', (err) => {
+        if (err) console.error('Error clearing marks:', err.message);
+      });
+      
+      // Clear all round results
+      db.run('DELETE FROM rondte_uitslag', (err) => {
+        if (err) console.error('Error clearing round results:', err.message);
+      });
+      
+      // Clear all members
+      db.run('DELETE FROM Lid', (err) => {
+        if (err) console.error('Error clearing members:', err.message);
+      });
+      
+      // Clear all teams
+      db.run('DELETE FROM Span', (err) => {
+        if (err) console.error('Error clearing teams:', err.message);
+      });
+      
+      // Clear all merkblad records
+      db.run('DELETE FROM Merkblad', (err) => {
+        if (err) console.error('Error clearing merkblad records:', err.message);
+      });
+      
+      // Clear all criteria
+      db.run('DELETE FROM Kriteria', (err) => {
+        if (err) console.error('Error clearing criteria:', err.message);
+      });
+      
+      // Clear all rounds
+      db.run('DELETE FROM Rondte', (err) => {
+        if (err) console.error('Error clearing rounds:', err.message);
+      });
+      
+      // Reset auto-increment counters
+      db.run('DELETE FROM sqlite_sequence', (err) => {
+        if (err) console.error('Error resetting auto-increment:', err.message);
+      });
+      
+      // Reinitialize with default data
+      db.run(`
+        INSERT INTO Rondte (rondte_id, is_eerste, is_laaste, is_gesluit, max_spanne)
+        VALUES (1, 1, 0, 0, 100)
+      `, (err) => {
+        if (err) {
+          console.error('Error creating default round:', err.message);
+          res.status(500).json({ error: 'Kon nie databasis skoonmaak nie', details: err.message });
+          db.close();
+          return;
+        }
+        
+        // Insert default criteria
+        const defaultCriteria = [
+          { beskrywing: 'Backend Development', default_totaal: 100 },
+          { beskrywing: 'Frontend Development', default_totaal: 100 },
+          { beskrywing: 'Database Design', default_totaal: 100 }
+        ];
+        
+        let criteriaCount = 0;
+        defaultCriteria.forEach((criteria, index) => {
+          db.run(`
+            INSERT INTO Kriteria (beskrywing, default_totaal)
+            VALUES (?, ?)
+          `, [criteria.beskrywing, criteria.default_totaal], (err) => {
+            if (err) {
+              console.error(`Error creating criteria ${index + 1}:`, err.message);
+            } else {
+              criteriaCount++;
+              if (criteriaCount === defaultCriteria.length) {
+                // Create merkblad records for the default round
+                db.all('SELECT kriteria_id FROM Kriteria', (err, criteria) => {
+                  if (err) {
+                    console.error('Error getting criteria:', err.message);
+                    res.status(500).json({ error: 'Kon nie databasis skoonmaak nie', details: err.message });
+                    db.close();
+                    return;
+                  }
+                  
+                  let merkbladCount = 0;
+                  criteria.forEach(crit => {
+                    db.run(`
+                      INSERT INTO Merkblad (rondte_id, kriteria_id, totaal)
+                      VALUES (?, ?, ?)
+                    `, [1, crit.kriteria_id, 100], (err) => {
+                      if (err) {
+                        console.error('Error creating merkblad:', err.message);
+                      } else {
+                        merkbladCount++;
+                        if (merkbladCount === criteria.length) {
+                          console.log('✅ Database cleared and reinitialized successfully!');
+                          res.json({ 
+                            message: 'Databasis suksesvol skoongemaak en herinisialiseer',
+                            status: 'success'
+                          });
+                          db.close();
+                        }
+                      }
+                    });
+                  });
+                });
+              }
+            }
+          });
+        });
+      });
+    });
+  } catch (err) {
+    console.error('Error clearing database:', err);
+    res.status(500).json({ error: 'Kon nie databasis skoonmaak nie', details: err.message });
   }
 });
 

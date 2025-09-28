@@ -11,7 +11,7 @@
   text-align: center;
   margin-bottom: 40px;
   padding: 30px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #0e1e3b;
   color: white;
   border-radius: 15px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
@@ -21,13 +21,15 @@
   margin: 0 0 15px 0;
   font-size: 2.5rem;
   font-weight: 700;
+  color: #CD7F32;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .merk-header p {
   margin: 0;
   font-size: 1.2rem;
-  opacity: 0.9;
+  color: white;
+  opacity: 1;
 }
 
 .merk-steps {
@@ -96,29 +98,30 @@
 }
 
 .team-info-card {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  background: #0e1e3b;
   border-radius: 12px;
   padding: 25px;
   margin-top: 20px;
   border: 1px solid #dee2e6;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  color: white;
 }
 
 .team-info-card h4 {
   margin: 0 0 15px 0;
-  color: #495057;
+  color: #CD7F32;
   font-size: 1.3rem;
   font-weight: 600;
 }
 
 .team-info-card p {
   margin: 0 0 10px 0;
-  color: #6c757d;
+  color: white;
   line-height: 1.6;
 }
 
 .team-info-card strong {
-  color: #495057;
+  color: white;
   font-weight: 600;
 }
 
@@ -257,6 +260,33 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #5a6268;
+  transform: translateY(-1px);
 }
 
 .message {

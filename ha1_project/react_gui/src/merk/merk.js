@@ -1,35 +1,44 @@
 import { useState, useEffect } from "react";
 import { stuurPunte, fetchAllTeams, submitMarks, fetchTeamMarks } from "../services/merk_services";
 import { fetchRounds } from "../services/beoordelaar_services";
+import { fetchAllCriteria } from "../services/criteria_services";
 import "./merk.css";
 
 function Merk() {
   const [message, setMessage] = useState("");
   const [teams, setTeams] = useState([]);
   const [rounds, setRounds] = useState([]);
+  const [criteria, setCriteria] = useState([]);
   const [selectedRoundId, setSelectedRoundId] = useState(1);
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [selectedTeam, setSelectedTeam] = useState(null);
-  const [marks, setMarks] = useState({
-    kriteria1: "",
-    kriteria2: "",
-    kriteria3: ""
-  });
+  const [marks, setMarks] = useState({});
   const [loading, setLoading] = useState(false);
   const [existingMarks, setExistingMarks] = useState(null);
 
-  // Load rounds on component mount
+  // Load rounds and criteria on component mount
   useEffect(() => {
-    const loadRounds = async () => {
+    const loadInitialData = async () => {
       try {
-        const roundsData = await fetchRounds();
+        const [roundsData, criteriaData] = await Promise.all([
+          fetchRounds(),
+          fetchAllCriteria()
+        ]);
         setRounds(roundsData);
+        setCriteria(criteriaData);
+        
+        // Initialize marks object with all criteria
+        const initialMarks = {};
+        criteriaData.forEach(crit => {
+          initialMarks[`kriteria${crit.kriteria_id}`] = "";
+        });
+        setMarks(initialMarks);
       } catch (error) {
-        setMessage("Fout met laai van rondtes: " + error.message);
+        setMessage("Fout met laai van data: " + error.message);
       }
     };
     
-    loadRounds();
+    loadInitialData();
   }, []);
 
   // Load teams when round changes
@@ -62,11 +71,12 @@ function Merk() {
     // Clear selected team when round changes
     setSelectedTeamId("");
     setSelectedTeam(null);
-    setMarks({
-      kriteria1: "",
-      kriteria2: "",
-      kriteria3: ""
+    // Clear marks for all criteria
+    const clearedMarks = {};
+    criteria.forEach(crit => {
+      clearedMarks[`kriteria${crit.kriteria_id}`] = "";
     });
+    setMarks(clearedMarks);
     setExistingMarks(null);
   }, [selectedRoundId]);
 
@@ -80,17 +90,18 @@ function Merk() {
           
           // Pre-fill form with existing marks if they exist
           if (marksData.has_marks) {
-            setMarks({
-              kriteria1: marksData.marks.kriteria1 || "",
-              kriteria2: marksData.marks.kriteria2 || "",
-              kriteria3: marksData.marks.kriteria3 || ""
+            const existingMarks = {};
+            criteria.forEach(crit => {
+              existingMarks[`kriteria${crit.kriteria_id}`] = marksData.marks[`kriteria${crit.kriteria_id}`] || "";
             });
+            setMarks(existingMarks);
           } else {
-            setMarks({
-              kriteria1: "",
-              kriteria2: "",
-              kriteria3: ""
+            // Clear marks for all criteria
+            const clearedMarks = {};
+            criteria.forEach(crit => {
+              clearedMarks[`kriteria${crit.kriteria_id}`] = "";
             });
+            setMarks(clearedMarks);
           }
         } catch (error) {
           console.error('Error loading existing marks:', error);
@@ -98,11 +109,12 @@ function Merk() {
         }
       } else {
         setExistingMarks(null);
-        setMarks({
-          kriteria1: "",
-          kriteria2: "",
-          kriteria3: ""
+        // Clear marks for all criteria
+        const clearedMarks = {};
+        criteria.forEach(crit => {
+          clearedMarks[`kriteria${crit.kriteria_id}`] = "";
         });
+        setMarks(clearedMarks);
       }
     };
 
@@ -132,35 +144,121 @@ function Merk() {
     }));
   };
 
+  const handleRefreshData = async () => {
+    try {
+      setLoading(true);
+      setMessage("");
+
+      // Reload criteria and rounds
+      const [criteriaData, roundsData] = await Promise.all([
+        fetchAllCriteria(),
+        fetchRounds()
+      ]);
+
+      setCriteria(criteriaData);
+      setRounds(roundsData);
+
+      // Clear existing marks and reload teams for current round
+      setMarks({});
+      if (selectedRoundId) {
+        const teamsData = await fetchAllTeams(selectedRoundId);
+        setTeams(teamsData);
+
+        // Initialize marks for new criteria
+        const newMarks = {};
+        criteriaData.forEach(crit => {
+          newMarks[`kriteria${crit.kriteria_id}`] = "";
+        });
+        setMarks(newMarks);
+      }
+
+      setMessage("Data suksesvol herlaai");
+    } catch (error) {
+      setMessage("Fout met herlaai van data: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper functions to avoid IIFE issues
+  const getSelectedRound = () => {
+    return rounds.find(r => r.rondte_id === selectedRoundId);
+  };
+
+  const isRoundClosed = () => {
+    const selectedRound = getSelectedRound();
+    return selectedRound && selectedRound.is_gesluit === 1;
+  };
+
+  const getButtonText = () => {
+    if (loading) return 'Stuur...';
+    return isRoundClosed() ? 'Rondte Gesluit' : 'Stuur Punte';
+  };
+
   const handleSubmitMarks = async () => {
     if (!selectedTeamId) {
       setMessage("Kies asseblief 'n span om te merk");
       return;
     }
 
-    // Validate marks
-    const kriteria1 = parseFloat(marks.kriteria1);
-    const kriteria2 = parseFloat(marks.kriteria2);
-    const kriteria3 = parseFloat(marks.kriteria3);
+    // Check if the selected round is closed
+    const selectedRound = rounds.find(r => r.rondte_id === selectedRoundId);
+    if (selectedRound && selectedRound.is_gesluit) {
+      setMessage("Kan nie punte byvoeg vir 'n geslote rondte nie");
+      return;
+    }
 
-    // Check if all fields are filled
-    if (marks.kriteria1 === "" || marks.kriteria2 === "" || marks.kriteria3 === "") {
+    // Validate marks for all criteria
+    const marksToSubmit = {};
+    let hasEmptyFields = false;
+    let hasInvalidNumbers = false;
+    let hasInvalidRange = false;
+    let hasDecimals = false;
+
+    for (const crit of criteria) {
+      const markKey = `kriteria${crit.kriteria_id}`;
+      const markValue = marks[markKey];
+      
+      if (markValue === "") {
+        hasEmptyFields = true;
+        break;
+      }
+      
+      const numericValue = parseFloat(markValue);
+      if (isNaN(numericValue)) {
+        hasInvalidNumbers = true;
+        break;
+      }
+      
+      if (numericValue < 0 || numericValue > crit.default_totaal) {
+        hasInvalidRange = true;
+        break;
+      }
+      
+      if (numericValue % 1 !== 0) {
+        hasDecimals = true;
+        break;
+      }
+      
+      marksToSubmit[markKey] = numericValue;
+    }
+
+    if (hasEmptyFields) {
       setMessage("Vul asseblief alle punte in voordat jy dit indien");
       return;
     }
 
-    if (isNaN(kriteria1) || isNaN(kriteria2) || isNaN(kriteria3)) {
+    if (hasInvalidNumbers) {
       setMessage("Alle punte moet geldige nommers wees");
       return;
     }
 
-    if (kriteria1 < 0 || kriteria1 > 100 || kriteria2 < 0 || kriteria2 > 100 || kriteria3 < 0 || kriteria3 > 100) {
-      setMessage("Punte moet tussen 0 en 100 wees");
+    if (hasInvalidRange) {
+      setMessage("Punte moet tussen 0 en die maksimum totaal vir elke kriteria wees");
       return;
     }
 
-    // Check for decimal places
-    if (kriteria1 % 1 !== 0 || kriteria2 % 1 !== 0 || kriteria3 % 1 !== 0) {
+    if (hasDecimals) {
       setMessage("Punte moet heelgetalle wees (geen desimale punte nie)");
       return;
     }
@@ -169,11 +267,7 @@ function Merk() {
     setMessage("");
 
     try {
-      await submitMarks(selectedTeamId, {
-        kriteria1: kriteria1,
-        kriteria2: kriteria2,
-        kriteria3: kriteria3
-      }, selectedRoundId);
+      await submitMarks(selectedTeamId, marksToSubmit, selectedRoundId);
       
       setMessage("Punte suksesvol gestuur vir " + (selectedTeam?.naam || "geselekteerde span") + " in Rondte " + selectedRoundId + "!");
       
@@ -197,10 +291,20 @@ function Merk() {
       
       <div className="merk-steps">
         <div className="merk-step">
-          <h3>
-            <span className="step-number">1</span>
-            Kies 'n rondte en span om te merk
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3>
+              <span className="step-number">1</span>
+              Kies 'n rondte en span om te merk
+            </h3>
+            <button 
+              onClick={handleRefreshData}
+              disabled={loading}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.9em', padding: '8px 16px' }}
+            >
+              {loading ? 'Herlaai...' : 'Herlaai Data'}
+            </button>
+          </div>
           
           <div className="round-selector" style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '10px', color: '#333', fontWeight: 'bold' }}>
@@ -260,9 +364,11 @@ function Merk() {
                   {existingMarks?.has_marks ? (
                     <div className="existing-marks">
                       <ul>
-                        <li>Backend Development: {existingMarks.marks.kriteria1}/100</li>
-                        <li>Frontend Development: {existingMarks.marks.kriteria2}/100</li>
-                        <li>Database Design: {existingMarks.marks.kriteria3}/100</li>
+                        {criteria.map(crit => (
+                          <li key={crit.kriteria_id}>
+                            {crit.beskrywing}: {existingMarks.marks[`kriteria${crit.kriteria_id}`] || 0}/{crit.default_totaal}
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   ) : (
@@ -283,56 +389,24 @@ function Merk() {
               Voltooi die merkblad
             </h3>
             <div className="marks-form">
-              <div className="mark-input-group">
-                <label className="mark-label">
-                  Backend Development (0-100):
-                </label>
-                <input
-                  type="number"
-                  name="kriteria1"
-                  value={marks.kriteria1}
-                  onChange={handleMarkChange}
-                  min="0"
-                  max="100"
-                  className="mark-input"
-                  placeholder="Voer punte in"
-                  required
-                />
-              </div>
-              
-              <div className="mark-input-group">
-                <label className="mark-label">
-                  Frontend Development (0-100):
-                </label>
-                <input
-                  type="number"
-                  name="kriteria2"
-                  value={marks.kriteria2}
-                  onChange={handleMarkChange}
-                  min="0"
-                  max="100"
-                  className="mark-input"
-                  placeholder="Voer punte in"
-                  required
-                />
-              </div>
-              
-              <div className="mark-input-group">
-                <label className="mark-label">
-                  Database Design (0-100):
-                </label>
-                <input
-                  type="number"
-                  name="kriteria3"
-                  value={marks.kriteria3}
-                  onChange={handleMarkChange}
-                  min="0"
-                  max="100"
-                  className="mark-input"
-                  placeholder="Voer punte in"
-                  required
-                />
-              </div>
+              {criteria.map(crit => (
+                <div key={crit.kriteria_id} className="mark-input-group">
+                  <label className="mark-label">
+                    {crit.beskrywing} (0-{crit.default_totaal}):
+                  </label>
+                  <input
+                    type="number"
+                    name={`kriteria${crit.kriteria_id}`}
+                    value={marks[`kriteria${crit.kriteria_id}`] || ""}
+                    onChange={handleMarkChange}
+                    min="0"
+                    max={crit.default_totaal}
+                    className="mark-input"
+                    placeholder="Voer punte in"
+                    required
+                  />
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -344,12 +418,17 @@ function Merk() {
                 <span className="step-number" style={{ background: 'white', color: '#28a745' }}>3</span>
                 Dien die voltooide merkblad in
               </h3>
+              {isRoundClosed() ? (
+                <div style={{ background: '#ffebee', color: '#c62828', padding: '10px', borderRadius: '5px', marginBottom: '15px' }}>
+                  <strong>Let op:</strong> Hierdie rondte is reeds gesluit. Jy kan nie meer punte byvoeg nie.
+                </div>
+              ) : null}
               <button
                 onClick={handleSubmitMarks}
-                disabled={loading}
+                disabled={loading || isRoundClosed()}
                 className="submit-button"
               >
-                {loading ? 'Stuur...' : 'Stuur Punte'}
+                {getButtonText()}
               </button>
             </div>
           </div>

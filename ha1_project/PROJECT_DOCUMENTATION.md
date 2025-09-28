@@ -1219,7 +1219,301 @@ The system provides a complete solution for team management and project evaluati
 
 ---
 
+## Observer Pattern Implementation
+
+### **Overview:**
+The project implements the Observer pattern to provide real-time data synchronization across components without breaking existing functionality. This pattern ensures that when data changes in one component, all other components are automatically notified and updated.
+
+### **Core Components:**
+
+#### **1. Observer Pattern Classes (`src/observers/Observer.js`):**
+```javascript
+// Observer interface for components that want notifications
+export class Observer {
+  constructor(componentName) {
+    this.componentName = componentName;
+  }
+  
+  update(dataType, data) {
+    // Called when data changes
+  }
+}
+
+// Subject that manages observers and notifies them
+export class Subject {
+  addObserver(observer) { /* Add observer */ }
+  removeObserver(observer) { /* Remove observer */ }
+  notifyObservers(dataType, data) { /* Notify all observers */ }
+}
+
+// DataStore implementing Subject pattern
+export class DataStore extends Subject {
+  updateTeams(teams) { /* Update teams and notify */ }
+  updateCriteria(criteria) { /* Update criteria and notify */ }
+  updateMarks(teamId, roundId, marks) { /* Update marks and notify */ }
+}
+```
+
+#### **2. Observer Services (`src/services/observer_services.js`):**
+```javascript
+// Teams operations with automatic notifications
+export class TeamsObserverService {
+  static async createTeam(teamData) {
+    const newTeam = await createTeam(teamData);
+    await this.loadTeams(); // Notifies all observers
+    return newTeam;
+  }
+}
+
+// Criteria operations with automatic notifications
+export class CriteriaObserverService {
+  static async createCriteria(criteriaData) {
+    const newCriteria = await createCriteria(criteriaData);
+    await this.loadCriteria(); // Notifies all observers
+    return newCriteria;
+  }
+}
+```
+
+#### **3. React Hooks (`src/hooks/useObserver.js`):**
+```javascript
+// Generic hook for subscribing to data changes
+export const useObserver = (componentName, options = {}) => {
+  const [data, setData] = useState({ teams: [], criteria: [], rounds: [] });
+  
+  useEffect(() => {
+    const observer = new Observer(componentName);
+    dataStore.addObserver(observer);
+    return () => dataStore.removeObserver(observer);
+  }, []);
+  
+  return { data, loading, error, refreshData };
+};
+
+// Specific hooks for different data types
+export const useCriteriaObserver = (componentName) => { /* ... */ };
+export const useTeamsObserver = (componentName) => { /* ... */ };
+export const useMarksObserver = (componentName) => { /* ... */ };
+```
+
+### **Benefits of Observer Pattern:**
+
+1. **Real-time Updates:** Components automatically receive updates when data changes
+2. **Decoupling:** Components don't need to know about each other
+3. **Single Source of Truth:** Centralized data management
+4. **Backward Compatibility:** Existing components continue to work unchanged
+5. **Scalability:** Easy to add new components that need data updates
+
+### **Usage Example:**
+```javascript
+function MyComponent() {
+  const { data, loading } = useCriteriaObserver('MyComponent');
+  
+  useEffect(() => {
+    CriteriaObserverService.loadCriteria();
+  }, []);
+  
+  // Data automatically updates when other components change it!
+  const criteria = data.criteria || [];
+  
+  return <div>{criteria.map(c => c.beskrywing)}</div>;
+}
+```
+
+### **Observer Pattern Files:**
+- `src/observers/Observer.js` - Core observer pattern implementation
+- `src/services/observer_services.js` - Services with automatic notifications
+- `src/hooks/useObserver.js` - React hooks for easy integration
+- `src/merkadmin/merkadmin_observer.js` - Example converted component
+- `src/components/ObserverDemo.js` - Demonstration component
+
+---
+
+## RESTful API Implementation
+
+### **Overview:**
+The project implements a comprehensive RESTful API following REST principles with proper HTTP methods, resource-based URLs, and JSON responses. The API provides 18+ endpoints for complete CRUD operations.
+
+### **RESTful Principles Followed:**
+
+#### **1. HTTP Methods Used Correctly:**
+```javascript
+GET    /teams              // Get all teams
+GET    /teams/:id          // Get specific team
+POST   /teams              // Create new team
+PUT    /teams/:id          // Update team
+DELETE /teams/:id          // Delete team
+```
+
+#### **2. Resource-Based URLs:**
+```javascript
+// Teams resource
+GET    /teams
+POST   /teams
+GET    /teams/:id
+PUT    /teams/:id
+DELETE /teams/:id
+
+// Team members sub-resource
+GET    /teams/:id/members
+POST   /teams/:id/members
+GET    /members/:id
+PUT    /members/:id
+DELETE /members/:id
+
+// Criteria resource
+GET    /criteria
+POST   /criteria
+GET    /criteria/:id
+PUT    /criteria/:id
+DELETE /criteria/:id
+
+// Rounds resource
+GET    /rounds
+GET    /rounds/:id/teams-marks
+POST   /rounds/:id/close
+```
+
+#### **3. Proper HTTP Status Codes:**
+```javascript
+// Success responses
+200 OK          // Successful GET requests
+201 Created     // Successful POST requests
+204 No Content  // Successful DELETE requests
+
+// Error responses
+400 Bad Request // Invalid request data
+404 Not Found   // Resource not found
+500 Internal Server Error // Server errors
+```
+
+#### **4. JSON Response Format:**
+```javascript
+// Success response example
+{
+  "span_id": 1,
+  "naam": "Team Alpha",
+  "beskrywing": "Description",
+  "members": [...]
+}
+
+// Error response example
+{
+  "error": "Kon nie span laai nie",
+  "details": "Specific error message"
+}
+```
+
+### **Complete API Endpoints:**
+
+#### **Teams Management:**
+```javascript
+GET    /teams                    // Get all teams
+GET    /teams/:id                // Get specific team
+POST   /teams                    // Create new team
+PUT    /teams/:id                // Update team
+DELETE /teams/:id                // Delete team
+```
+
+#### **Members Management:**
+```javascript
+GET    /teams/:id/members        // Get team members
+GET    /members/:id              // Get specific member
+POST   /teams/:id/members        // Create new member
+PUT    /members/:id              // Update member
+DELETE /members/:id              // Delete member
+```
+
+#### **Criteria Management:**
+```javascript
+GET    /criteria                 // Get all criteria
+GET    /criteria/:id             // Get specific criteria
+POST   /criteria                 // Create new criteria
+PUT    /criteria/:id             // Update criteria
+DELETE /criteria/:id             // Delete criteria
+```
+
+#### **Grading System:**
+```javascript
+POST   /teams/:id/marks          // Submit marks for a team
+GET    /teams/:id/marks          // Get marks for a team
+DELETE /teams/:id/marks          // Delete marks for a team
+```
+
+#### **Round Management:**
+```javascript
+GET    /rounds                   // Get all rounds
+GET    /rounds/:id/teams-marks   // Get teams with marks for round
+POST   /rounds/:id/close         // Close round and determine winner
+GET    /rounds/:id/winner        // Get round winner
+```
+
+#### **Real-time Features:**
+```javascript
+GET    /stream                   // Server-Sent Events stream
+POST   /merk/punte               // Send real-time marks update
+```
+
+### **API Implementation Example:**
+```javascript
+// Teams endpoint implementation
+app.get('/teams', async (req, res) => {
+  try {
+    const teams = await getAllTeams();
+    res.json(teams); // 200 OK with JSON data
+  } catch (err) {
+    res.status(500).json({ 
+      error: 'Kon nie spanne laai nie', 
+      details: err.message 
+    });
+  }
+});
+
+app.post('/teams', async (req, res) => {
+  try {
+    const newTeam = await createTeam(req.body);
+    res.status(201).json(newTeam); // 201 Created
+  } catch (err) {
+    res.status(400).json({ 
+      error: 'Ongeldige data', 
+      details: err.message 
+    });
+  }
+});
+```
+
+### **RESTful Features:**
+
+1. **Stateless:** Each request contains all necessary information
+2. **Cacheable:** GET requests can be cached
+3. **Uniform Interface:** Consistent URL structure and HTTP methods
+4. **Client-Server:** Clear separation between frontend and backend
+5. **Layered System:** API can be accessed through different layers
+
+### **API Documentation:**
+- **Base URL:** `http://localhost:4000`
+- **Content-Type:** `application/json`
+- **CORS:** Configured for `http://localhost:3000`
+- **Methods:** GET, POST, PUT, DELETE, OPTIONS
+- **Response Format:** JSON with consistent error handling
+
+### **Testing the API:**
+```bash
+# Get all teams
+curl -X GET http://localhost:4000/teams
+
+# Create new team
+curl -X POST http://localhost:4000/teams \
+  -H "Content-Type: application/json" \
+  -d '{"naam":"Test Team","beskrywing":"Test Description"}'
+
+# Get specific team
+curl -X GET http://localhost:4000/teams/1
+```
+
+---
+
 **Project Created:** 2025  
 **Last Updated:** 28 September 2025  
-**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3, Dynamic Criteria Management  
+**Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3, Dynamic Criteria Management, Observer Pattern, RESTful API  
 **Purpose:** University Project - Team Management & Grading System with Dynamic Criteria Management

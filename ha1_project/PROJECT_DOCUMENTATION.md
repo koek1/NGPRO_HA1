@@ -1220,6 +1220,6 @@ The system provides a complete solution for team management and project evaluati
 ---
 
 **Project Created:** 2025  
-**Last Updated:** January 2025  
+**Last Updated:** 28 September 2025  
 **Technologies:** Node.js, Express.js, React.js, SQLite3, CSS3, Dynamic Criteria Management  
 **Purpose:** University Project - Team Management & Grading System with Dynamic Criteria Management

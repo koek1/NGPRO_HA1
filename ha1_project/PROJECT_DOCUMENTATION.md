@@ -418,7 +418,7 @@ react_gui/src/
 
 ##  **NEW FEATURE: Grading System**
 
-### **What We Built:**
+### **What I Built:**
 A comprehensive grading system that allows administrators to evaluate team projects across multiple criteria, perfect for academic project evaluation.
 
 ### **Grading System Features:**
@@ -504,7 +504,7 @@ app.get('/teams/:id/marks', async (req, res) => {
 
 ##  **NEW FEATURE: Beoordelaar Admin Panel**
 
-### **What We Built:**
+### **What I Built:**
 A comprehensive administrative panel for managing evaluation rounds, viewing real-time marks, and determining winners. This system provides complete oversight of the grading process.
 
 ### **Beoordelaar Admin Features:**
@@ -574,7 +574,7 @@ useEffect(() => {
 // Winner display with team members
 {winner && (
   <div className="winner-section">
-    <h3>🏆 Wenner Span</h3>
+    <h3>Wenner Span</h3>
     <div className="winner-card">
       {/* Winner team details */}
       {/* Team members display */}
@@ -753,10 +753,10 @@ Simplified the beoordelaar admin interface to focus on essential functionality o
 #### **5. Updated Winner Display Logic:**
 ```javascript
 // BEFORE: Used eliminationResults for final round detection
-<h3>{eliminationResults?.is_final_round ? '🏆 ALGEHELE WENNER 🏆' : '🏆 Wenner Span'}</h3>
+<h3>{eliminationResults?.is_final_round ? 'ALGEHELE WENNER' : 'Wenner Span'}</h3>
 
 // AFTER: Uses selectedRound for final round detection
-<h3>🏆 Wenner Span</h3>
+<h3>Wenner Span</h3>
 {selectedRound?.is_laaste && (
   <div className="overall-winner-banner">
     <p><strong>Proficiat! Hierdie span het die hele toernooi gewen!</strong></p>

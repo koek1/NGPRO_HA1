@@ -552,9 +552,8 @@ app.get('/teams/:id/marks', async (req, res) => {
 
         rows.forEach(row => {
           marks[`kriteria${row.kriteria_id}`] = row.punt;
-          if (row.punt > 0) {
-            hasActualMarks = true;
-          }
+          // Any mark (including 0) is considered an actual mark
+          hasActualMarks = true;
         });
 
         res.json({
@@ -807,37 +806,20 @@ app.delete('/criteria/:id', async (req, res) => {
     const dbPath = getDatabasePath();
     const db = new sqlite3.Database(dbPath);
 
-    // Check if criteria is being used in any merkblad
-    db.get(
-      'SELECT COUNT(*) as count FROM Merkblad WHERE kriteria_id = ?',
-      [kriteriaId],
-      (err, row) => {
-        if (err) {
-          res.status(500).json({ error: 'Kon nie kriteria gebruik kontroleer nie', details: err.message });
-          db.close();
-        } else if (row.count > 0) {
-          res.status(400).json({ 
-            error: 'Kan nie kriteria verwyder nie - dit word gebruik in merkblaaie' 
-          });
-          db.close();
-        } else {
-          // Safe to delete
-          db.run('DELETE FROM Kriteria WHERE kriteria_id = ?', [kriteriaId], function(err) {
-            if (err) {
-              res.status(500).json({ error: 'Kon nie kriteria verwyder nie', details: err.message });
-            } else if (this.changes === 0) {
-              res.status(404).json({ error: 'Kriteria nie gevind nie' });
-            } else {
-              res.status(200).json({ 
-                message: 'Kriteria suksesvol verwyder',
-                kriteria_id: kriteriaId
-              });
-            }
-            db.close();
-          });
-        }
+    // Delete criteria - database will handle cascade deletion of merkblad and marks
+    db.run('DELETE FROM Kriteria WHERE kriteria_id = ?', [kriteriaId], function(err) {
+      if (err) {
+        res.status(500).json({ error: 'Kon nie kriteria verwyder nie', details: err.message });
+      } else if (this.changes === 0) {
+        res.status(404).json({ error: 'Kriteria nie gevind nie' });
+      } else {
+        res.status(200).json({ 
+          message: 'Kriteria suksesvol verwyder (en alle verwante merkblaaie en punte)',
+          kriteria_id: kriteriaId
+        });
       }
-    );
+      db.close();
+    });
   } catch (err) {
     res.status(500).json({ error: 'Kon nie kriteria verwyder nie', details: err.message });
   }
@@ -921,7 +903,7 @@ app.get('/rounds/:id/teams-marks', async (req, res) => {
           k.kriteria_id,
           k.beskrywing as kriteria_naam,
           k.default_totaal,
-          COALESCE(psb.punt, 0) as punt
+          psb.punt
         FROM Span s
         CROSS JOIN Kriteria k
         LEFT JOIN Merkblad m ON m.rondte_id = ? AND m.kriteria_id = k.kriteria_id
@@ -945,7 +927,10 @@ app.get('/rounds/:id/teams-marks', async (req, res) => {
                 marks: {}
               });
             }
-            teamsMap.get(row.span_id).marks[row.kriteria_id] = row.punt;
+            // Only include marks that are not NULL (actual marks exist)
+            if (row.punt !== null) {
+              teamsMap.get(row.span_id).marks[row.kriteria_id] = row.punt;
+            }
           });
 
           const teams = Array.from(teamsMap.values());

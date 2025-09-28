@@ -1,12 +1,12 @@
-# 🎓 University Presentation Guide
+# University Presentation Guide
 ## Team Management & Grading System
 
-### **📋 Quick Overview (30 seconds)**
+### **Quick Overview (30 seconds)**
 "I built a full-stack web application for team management and project grading. It allows administrators to create teams, manage members, and grade projects across multiple criteria - perfect for university project evaluation."
 
 ---
 
-## **🎯 What to Show (5-7 minutes)**
+## **What to Show (5-7 minutes)**
 
 ### **1. Team Admin Page (2 minutes)**
 **What to say:** "This is the main admin interface where you can manage teams and their members."
@@ -76,7 +76,7 @@
 
 ---
 
-## **🎤 Presentation Tips**
+## **Presentation Tips**
 
 ### **Opening (30 seconds):**
 "Good [morning/afternoon]. Today I'll present my full-stack web application - a Team Management & Grading System built with React, Node.js, and SQLite. This system demonstrates modern web development practices and is perfect for academic project evaluation."
@@ -116,7 +116,7 @@
 
 ---
 
-## **📊 Project Statistics to Mention**
+## **Project Statistics to Mention**
 
 - **2,000+ lines of code**
 - **7 React components**
@@ -127,7 +127,7 @@
 
 ---
 
-## **🚀 Demo Flow (Practice This!)**
+## **Demo Flow (Practice This!)**
 
 1. **Start with Team Admin** - Show clean interface
 2. **Go to Grading page** - Select team, enter marks

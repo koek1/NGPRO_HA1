@@ -91,7 +91,7 @@ function MerkAdmin() {
   };
 
   const handleDelete = async (criteriaId, beskrywing) => {
-    if (window.confirm(`Is jy seker jy wil "${beskrywing}" verwyder?`)) {
+    if (window.confirm(`Is jy seker jy wil "${beskrywing}" verwyder?\n\nDit sal ook alle verwante merkblaaie en punte verwyder.`)) {
       try {
         setError(null);
         await deleteCriteria(criteriaId);

@@ -1,11 +1,11 @@
 # Team Management & Grading System - Presentation Summary
 
-## 🎯 **Project Overview**
+## **Project Overview**
 **Built a comprehensive Team Management & Grading System that allows administrators to create, manage, and grade teams with their members. The system includes both team administration and a sophisticated grading system for evaluating team projects.**
 
 ---
 
-## 🏗️ **System Architecture**
+## **System Architecture**
 
 ### **Technology Stack:**
 - **Backend:** Node.js + Express.js (Port 4000)
@@ -33,7 +33,7 @@
 
 ---
 
-## 🗄️ **Database Design**
+## **Database Design**
 
 ### **Core Tables:**
 1. **Span (Teams):** `span_id`, `naam`, `projek_beskrywing`, `span_bio`, `logo`
@@ -143,7 +143,7 @@ DELETE /teams/:id/marks   // Clear marks for a team
 
 ---
 
-## 🎨 **User Interface Components**
+## **User Interface Components**
 
 ### **Main Components:**
 1. **SpanAdmin** - Main admin interface container
@@ -162,7 +162,7 @@ DELETE /teams/:id/marks   // Clear marks for a team
 
 ---
 
-## 🚀 **How to Run**
+## **How to Run**
 
 ### **Backend:**
 ```bash
@@ -185,7 +185,7 @@ npm start  # Runs on http://localhost:3000
 
 ---
 
-## 🎯 **Technical Decisions**
+## **Technical Decisions**
 
 ### **Why These Technologies?**
 - **SQLite:** Lightweight, file-based, perfect for development
@@ -201,7 +201,7 @@ npm start  # Runs on http://localhost:3000
 
 ---
 
-## 📊 **Project Statistics**
+## **Project Statistics**
 
 - **Backend Files:** 3 main files
 - **Frontend Components:** 7 React components  
@@ -224,7 +224,7 @@ npm start  # Runs on http://localhost:3000
 
 ---
 
-## 🏆 **Key Achievements**
+## **Key Achievements**
 
 ### **What We Built:**
 - ✅ **Complete CRUD System** - Full team and member management
@@ -268,4 +268,4 @@ This Team Management & Grading System demonstrates:
 
 ---
 
-**Ready for University Presentation! 🎓🚀**
+**Ready for University Presentation!**

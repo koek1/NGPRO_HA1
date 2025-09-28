@@ -21,18 +21,18 @@
 This project implements a comprehensive **Team Management & Grading System** that allows administrators to create, manage, and grade teams with their members. The system was built with a focus on simplicity and user experience, particularly for academic project evaluation.
 
 ### **Core Functionality:**
-- ✅ Create new teams with members
-- ✅ Edit existing teams and members
-- ✅ Delete teams and members
-- ✅ View team details and member information
-- ✅ **Grade teams across multiple criteria** (NEW!)
-- ✅ **Display marks and calculate averages** (NEW!)
-- ✅ **Beoordelaar Admin Panel** (NEW!)
-- ✅ **Round management and winner determination** (NEW!)
-- ✅ **Dynamic criteria management** (NEW!)
-- ✅ **Real-time marks updates** (NEW!)
-- ✅ Image management via URL inputs
-- ✅ Real-time updates and live previews
+-  Create new teams with members
+-  Edit existing teams and members
+-  Delete teams and members
+-  View team details and member information
+-  **Grade teams across multiple criteria** (NEW!)
+-  **Display marks and calculate averages** (NEW!)
+-  **Beoordelaar Admin Panel** (NEW!)
+-  **Round management and winner determination** (NEW!)
+-  **Dynamic criteria management** (NEW!)
+-  **Real-time marks updates** (NEW!)
+-  Image management via URL inputs
+-  Real-time updates and live previews
 
 ---
 

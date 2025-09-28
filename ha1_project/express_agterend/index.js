@@ -28,6 +28,19 @@ app.get('/', (req, res) => {
 initializeDatabase()
     .then((dbPath) => {
         console.log(`SQLite DB ready at ${dbPath}`);
+        
+        // Ensure Round 2 is marked as final round
+        const sqlite3 = require('sqlite3').verbose();
+        const db = new sqlite3.Database(dbPath);
+        db.run('UPDATE Rondte SET is_laaste = 1 WHERE rondte_id = 2', (err) => {
+            if (err) {
+                console.error('Error updating Round 2 as final:', err);
+            } else {
+                console.log('Round 2 marked as final round');
+            }
+            db.close();
+        });
+        
         app.listen(port, () => {
             console.log(`Express API listening at http://localhost:${port}`);
         });
@@ -314,7 +327,7 @@ app.post('/teams/:id/marks', async (req, res) => {
       return res.status(404).json({ error: 'Span nie gevind nie' });
     }
 
-    const { kriteria1, kriteria2, kriteria3 } = req.body;
+    const { kriteria1, kriteria2, kriteria3, rondteId } = req.body;
     
     // Validate marks are provided and are numbers
     if (kriteria1 === undefined || kriteria2 === undefined || kriteria3 === undefined) {
@@ -329,13 +342,15 @@ app.post('/teams/:id/marks', async (req, res) => {
       });
     }
 
+    // Use provided round ID or default to 1 for backward compatibility
+    const targetRondteId = rondteId || 1;
+
     // Get database connection
     const sqlite3 = require('sqlite3').verbose();
     const dbPath = getDatabasePath();
     const db = new sqlite3.Database(dbPath);
 
-    // Get the first round and criteria IDs (assuming we're using the first round)
-    const rondteId = 1;
+    // Get criteria IDs for the specified round
     const kriteriaIds = [1, 2, 3]; // Backend, Frontend, Database
     const marks = [kriteria1, kriteria2, kriteria3];
 
@@ -344,7 +359,7 @@ app.post('/teams/:id/marks', async (req, res) => {
       db.run('BEGIN TRANSACTION');
 
       // Delete existing marks for this team in this round
-      db.run('DELETE FROM Punte_span_brug WHERE span_id = ? AND merkblad_id IN (SELECT merkblad_id FROM Merkblad WHERE rondte_id = ?)', [spanId, rondteId], (err) => {
+      db.run('DELETE FROM Punte_span_brug WHERE span_id = ? AND merkblad_id IN (SELECT merkblad_id FROM Merkblad WHERE rondte_id = ?)', [spanId, targetRondteId], (err) => {
         if (err) {
           db.run('ROLLBACK');
           res.status(500).json({ error: 'Kon nie bestaande punte verwyder nie', details: err.message });
@@ -358,7 +373,7 @@ app.post('/teams/:id/marks', async (req, res) => {
 
         kriteriaIds.forEach((kriteriaId, index) => {
           // Get or create merkblad for this round and criteria
-          db.get('SELECT merkblad_id FROM Merkblad WHERE rondte_id = ? AND kriteria_id = ?', [rondteId, kriteriaId], (err, row) => {
+          db.get('SELECT merkblad_id FROM Merkblad WHERE rondte_id = ? AND kriteria_id = ?', [targetRondteId, kriteriaId], (err, row) => {
             if (err) {
               hasError = true;
               db.run('ROLLBACK');
@@ -373,7 +388,7 @@ app.post('/teams/:id/marks', async (req, res) => {
               insertMark(merkbladId, marks[index]);
             } else {
               // Create new merkblad
-              db.run('INSERT INTO Merkblad (rondte_id, kriteria_id, totaal) VALUES (?, ?, 100)', [rondteId, kriteriaId], function(err) {
+              db.run('INSERT INTO Merkblad (rondte_id, kriteria_id, totaal) VALUES (?, ?, 100)', [targetRondteId, kriteriaId], function(err) {
                 if (err) {
                   hasError = true;
                   db.run('ROLLBACK');
@@ -436,6 +451,9 @@ app.get('/teams/:id/marks', async (req, res) => {
       return res.status(400).json({ error: 'Ongeldige span ID' });
     }
 
+    // Get round ID from query parameter, default to 1 for backward compatibility
+    const rondteId = parseInt(req.query.rondteId) || 1;
+
     // Validate that team exists
     const team = await getTeamById(spanId);
     if (!team) {
@@ -447,7 +465,7 @@ app.get('/teams/:id/marks', async (req, res) => {
     const dbPath = getDatabasePath();
     const db = new sqlite3.Database(dbPath);
 
-    // Get marks for this team
+    // Get marks for this team in the specified round
     db.all(`
       SELECT 
         psb.punt,
@@ -456,9 +474,9 @@ app.get('/teams/:id/marks', async (req, res) => {
       FROM Punte_span_brug psb
       JOIN Merkblad m ON psb.merkblad_id = m.merkblad_id
       JOIN Kriteria k ON m.kriteria_id = k.kriteria_id
-      WHERE psb.span_id = ? AND m.rondte_id = 1
+      WHERE psb.span_id = ? AND m.rondte_id = ?
       ORDER BY k.kriteria_id
-    `, [spanId], (err, rows) => {
+    `, [spanId, rondteId], (err, rows) => {
       if (err) {
         res.status(500).json({ error: 'Kon nie punte laai nie', details: err.message });
       } else {
@@ -583,45 +601,83 @@ app.get('/rounds/:id/teams-marks', async (req, res) => {
     const dbPath = getDatabasePath();
     const db = new sqlite3.Database(dbPath);
 
-    db.all(`
-      SELECT 
-        s.span_id,
-        s.naam as span_naam,
-        s.projek_beskrywing,
-        s.span_bio,
-        s.logo,
-        k.kriteria_id,
-        k.beskrywing as kriteria_naam,
-        COALESCE(psb.punt, 0) as punt
-      FROM Span s
-      CROSS JOIN Kriteria k
-      LEFT JOIN Merkblad m ON m.rondte_id = ? AND m.kriteria_id = k.kriteria_id
-      LEFT JOIN Punte_span_brug psb ON psb.span_id = s.span_id AND psb.merkblad_id = m.merkblad_id
-      ORDER BY s.span_id, k.kriteria_id
-    `, [rondteId], (err, rows) => {
-      if (err) {
-        res.status(500).json({ error: 'Kon nie span punte laai nie', details: err.message });
-      } else {
-        // Group by team
-        const teamsMap = new Map();
-        rows.forEach(row => {
-          if (!teamsMap.has(row.span_id)) {
-            teamsMap.set(row.span_id, {
-              span_id: row.span_id,
-              naam: row.span_naam,
-              projek_beskrywing: row.projek_beskrywing,
-              span_bio: row.span_bio,
-              logo: row.logo,
-              marks: {}
-            });
-          }
-          teamsMap.get(row.span_id).marks[row.kriteria_id] = row.punt;
-        });
+    // First, get the teams that should participate in this round
+    // For round 1, show all teams. For subsequent rounds, only show remaining teams.
+    let teamFilterQuery = '';
+    let teamFilterParams = [];
+    
+    if (rondteId === 1) {
+      // Round 1: Show all teams
+      teamFilterQuery = 'SELECT span_id FROM Span';
+    } else {
+      // Round 2+: Only show teams that were not eliminated in the previous round
+      teamFilterQuery = `
+        SELECT ru.span_id 
+        FROM rondte_uitslag ru 
+        WHERE ru.rondte_id = ? AND ru.in_gevaar = 0
+      `;
+      teamFilterParams = [rondteId - 1];
+    }
 
-        const teams = Array.from(teamsMap.values());
-        res.json(teams);
+    db.all(teamFilterQuery, teamFilterParams, (teamErr, eligibleTeams) => {
+      if (teamErr) {
+        res.status(500).json({ error: 'Kon nie deelnemende spanne kry nie', details: teamErr.message });
+        db.close();
+        return;
       }
-      db.close();
+
+      if (eligibleTeams.length === 0) {
+        res.json([]);
+        db.close();
+        return;
+      }
+
+      // Create a list of eligible team IDs
+      const eligibleTeamIds = eligibleTeams.map(team => team.span_id);
+      const placeholders = eligibleTeamIds.map(() => '?').join(',');
+
+      // Now get marks for only the eligible teams
+      db.all(`
+        SELECT 
+          s.span_id,
+          s.naam as span_naam,
+          s.projek_beskrywing,
+          s.span_bio,
+          s.logo,
+          k.kriteria_id,
+          k.beskrywing as kriteria_naam,
+          COALESCE(psb.punt, 0) as punt
+        FROM Span s
+        CROSS JOIN Kriteria k
+        LEFT JOIN Merkblad m ON m.rondte_id = ? AND m.kriteria_id = k.kriteria_id
+        LEFT JOIN Punte_span_brug psb ON psb.span_id = s.span_id AND psb.merkblad_id = m.merkblad_id
+        WHERE s.span_id IN (${placeholders})
+        ORDER BY s.span_id, k.kriteria_id
+      `, [rondteId, ...eligibleTeamIds], (err, rows) => {
+        if (err) {
+          res.status(500).json({ error: 'Kon nie span punte laai nie', details: err.message });
+        } else {
+          // Group by team
+          const teamsMap = new Map();
+          rows.forEach(row => {
+            if (!teamsMap.has(row.span_id)) {
+              teamsMap.set(row.span_id, {
+                span_id: row.span_id,
+                naam: row.span_naam,
+                projek_beskrywing: row.projek_beskrywing,
+                span_bio: row.span_bio,
+                logo: row.logo,
+                marks: {}
+              });
+            }
+            teamsMap.get(row.span_id).marks[row.kriteria_id] = row.punt;
+          });
+
+          const teams = Array.from(teamsMap.values());
+          res.json(teams);
+        }
+        db.close();
+      });
     });
   } catch (err) {
     res.status(500).json({ error: 'Kon nie span punte laai nie', details: err.message });
@@ -662,28 +718,112 @@ app.post('/rounds/:id/close', async (req, res) => {
         res.status(500).json({ error: 'Kon nie rondte sluit nie', details: err.message });
         db.close();
       } else {
-        const winner = rows.length > 0 ? rows[0] : null;
+        // Check if this is the final round
+        db.get('SELECT is_laaste FROM Rondte WHERE rondte_id = ?', [rondteId], (roundErr, roundInfo) => {
+          if (roundErr) {
+            console.error('Error checking if round is final:', roundErr);
+            res.status(500).json({ error: 'Kon nie rondte status kry nie', details: roundErr.message });
+            db.close();
+            return;
+          }
+          
+          const isFinalRound = roundInfo && roundInfo.is_laaste === 1;
+          console.log(`Round ${rondteId} is final round:`, isFinalRound);
+          
+          let totalTeams, teamsToEliminate, remainingTeams, teamsWithStatus, winner;
+          
+          if (isFinalRound) {
+            // Final round: No elimination, just determine the overall winner
+            totalTeams = rows.length;
+            teamsToEliminate = 0;
+            remainingTeams = totalTeams;
+            
+            console.log(`Final Round ${rondteId}: ${totalTeams} teams - determining overall winner`);
+            
+            // All teams are safe in final round, just rank them
+            teamsWithStatus = rows.map((team, index) => ({
+              ...team,
+              rank: index + 1,
+              is_eliminated: false,
+              in_gevaar: 0
+            }));
+            
+            winner = rows.length > 0 ? rows[0] : null;
+          } else {
+            // Regular round: Eliminate bottom 50%
+            totalTeams = rows.length;
+            teamsToEliminate = Math.floor(totalTeams * 0.5);
+            remainingTeams = totalTeams - teamsToEliminate;
+            
+            console.log(`Round ${rondteId}: ${totalTeams} teams, eliminating ${teamsToEliminate}, ${remainingTeams} remaining`);
+            
+            // Mark teams as eliminated or safe
+            teamsWithStatus = rows.map((team, index) => ({
+              ...team,
+              rank: index + 1,
+              is_eliminated: index >= remainingTeams,
+              in_gevaar: index >= remainingTeams ? 1 : 0
+            }));
+            
+            winner = rows.length > 0 ? rows[0] : null;
+          }
+          
+          const eliminatedTeams = teamsWithStatus.filter(team => team.is_eliminated);
+          const remainingTeamsList = teamsWithStatus.filter(team => !team.is_eliminated);
         
-        // If there's a winner, get their team members
-        if (winner) {
-          db.all(`
-            SELECT lid_id, naam, bio, foto
-            FROM Lid
-            WHERE span_id = ?
-            ORDER BY lid_id
-          `, [winner.span_id], (membersErr, members) => {
-            if (membersErr) {
-              console.error('Error getting winner members:', membersErr);
-              // Continue with closing round even if members fetch fails
-              closeRound();
-            } else {
-              winner.members = members || [];
-              closeRound();
-            }
+        // Save elimination results to rondte_uitslag table (only for non-final rounds)
+        let eliminationPromises = [];
+        
+        if (!isFinalRound) {
+          eliminationPromises = teamsWithStatus.map(team => {
+            return new Promise((resolve, reject) => {
+              db.run(`
+                INSERT OR REPLACE INTO rondte_uitslag 
+                (span_id, rondte_id, rank, in_gevaar, gemiddelde_punt)
+                VALUES (?, ?, ?, ?, ?)
+              `, [team.span_id, rondteId, team.rank, team.in_gevaar, Math.round(team.gemiddeld_punt)], (err) => {
+                if (err) {
+                  console.error(`Error saving elimination status for team ${team.span_id}:`, err);
+                  reject(err);
+                } else {
+                  resolve();
+                }
+              });
+            });
           });
-        } else {
-          closeRound();
         }
+
+        // For final rounds, just resolve immediately
+        const eliminationPromise = eliminationPromises.length > 0 
+          ? Promise.all(eliminationPromises)
+          : Promise.resolve();
+
+        eliminationPromise.then(() => {
+          // If there's a winner, get their team members
+          if (winner) {
+            db.all(`
+              SELECT lid_id, naam, bio, foto
+              FROM Lid
+              WHERE span_id = ?
+              ORDER BY lid_id
+            `, [winner.span_id], (membersErr, members) => {
+              if (membersErr) {
+                console.error('Error getting winner members:', membersErr);
+                // Continue with closing round even if members fetch fails
+                closeRound();
+              } else {
+                winner.members = members || [];
+                closeRound();
+              }
+            });
+          } else {
+            closeRound();
+          }
+        }).catch(err => {
+          console.error('Error saving elimination results:', err);
+          res.status(500).json({ error: 'Kon nie uitslag stoor nie', details: err.message });
+          db.close();
+        });
         
         function closeRound() {
           // Update round status to closed
@@ -703,12 +843,27 @@ app.post('/rounds/:id/close', async (req, res) => {
                       if (retryErr) {
                         res.status(500).json({ error: 'Kon nie rondte status opdateer nie', details: retryErr.message });
                       } else {
-                        res.json({
-                          message: 'Rondte suksesvol gesluit',
+                        const response = {
+                          message: isFinalRound ? 'Finale rondte gesluit - Algehele wenner bepaal!' : 'Rondte suksesvol gesluit',
                           rondte_id: rondteId,
                           winner: winner,
-                          all_teams: rows
-                        });
+                          all_teams: teamsWithStatus,
+                          is_final_round: isFinalRound,
+                          overall_winner: isFinalRound ? winner : null
+                        };
+
+                        // Only include elimination data for non-final rounds
+                        if (!isFinalRound) {
+                          response.eliminated_teams = eliminatedTeams;
+                          response.remaining_teams = remainingTeamsList;
+                          response.elimination_summary = {
+                            total_teams: totalTeams,
+                            eliminated_count: teamsToEliminate,
+                            remaining_count: remainingTeams
+                          };
+                        }
+
+                        res.json(response);
                       }
                       db.close();
                     });
@@ -719,22 +874,238 @@ app.post('/rounds/:id/close', async (req, res) => {
               }
             } else {
               console.log(`Round ${rondteId} closed successfully. Winner:`, winner?.naam || 'None');
-              res.json({
-                message: 'Rondte suksesvol gesluit',
+              const response = {
+                message: isFinalRound ? 'Finale rondte gesluit - Algehele wenner bepaal!' : 'Rondte suksesvol gesluit',
                 rondte_id: rondteId,
                 winner: winner,
-                all_teams: rows
-              });
+                all_teams: teamsWithStatus,
+                is_final_round: isFinalRound,
+                overall_winner: isFinalRound ? winner : null
+              };
+
+              // Only include elimination data for non-final rounds
+              if (!isFinalRound) {
+                response.eliminated_teams = eliminatedTeams;
+                response.remaining_teams = remainingTeamsList;
+                response.elimination_summary = {
+                  total_teams: totalTeams,
+                  eliminated_count: teamsToEliminate,
+                  remaining_count: remainingTeams
+                };
+              }
+
+              res.json(response);
             }
             if (!updateErr || !updateErr.message.includes('no such column: is_gesluit')) {
               db.close();
             }
           });
         }
+        });
       }
     });
   } catch (err) {
     res.status(500).json({ error: 'Kon nie rondte sluit nie', details: err.message });
+  }
+});
+
+// Endpoint to get elimination results for a round
+app.get('/rounds/:id/elimination', async (req, res) => {
+  try {
+    const rondteId = parseInt(req.params.id, 10);
+    if (isNaN(rondteId)) {
+      return res.status(400).json({ error: 'Ongeldige rondte ID' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    // Get elimination results from rondte_uitslag table
+    db.all(`
+      SELECT 
+        ru.span_id,
+        s.naam,
+        s.projek_beskrywing,
+        s.span_bio,
+        s.logo,
+        ru.rank,
+        ru.in_gevaar,
+        ru.gemiddelde_punt
+      FROM rondte_uitslag ru
+      JOIN Span s ON s.span_id = ru.span_id
+      WHERE ru.rondte_id = ?
+      ORDER BY ru.rank
+    `, [rondteId], (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: 'Kon nie uitslag kry nie', details: err.message });
+        db.close();
+      } else {
+        const eliminatedTeams = rows.filter(team => team.in_gevaar === 1);
+        const remainingTeams = rows.filter(team => team.in_gevaar === 0);
+        
+        res.json({
+          rondte_id: rondteId,
+          all_teams: rows,
+          eliminated_teams: eliminatedTeams,
+          remaining_teams: remainingTeams,
+          elimination_summary: {
+            total_teams: rows.length,
+            eliminated_count: eliminatedTeams.length,
+            remaining_count: remainingTeams.length
+          }
+        });
+        db.close();
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie uitslag kry nie', details: err.message });
+  }
+});
+
+// Endpoint to create next round with remaining teams
+app.post('/rounds/:id/create-next', async (req, res) => {
+  try {
+    const currentRoundId = parseInt(req.params.id, 10);
+    if (isNaN(currentRoundId)) {
+      return res.status(400).json({ error: 'Ongeldige rondte ID' });
+    }
+
+    const sqlite3 = require('sqlite3').verbose();
+    const dbPath = getDatabasePath();
+    const db = new sqlite3.Database(dbPath);
+
+    // First check if current round is closed
+    db.get('SELECT is_gesluit FROM Rondte WHERE rondte_id = ?', [currentRoundId], (err, round) => {
+      if (err) {
+        console.error('Error checking round status:', err);
+        res.status(500).json({ error: 'Kon nie rondte status kry nie', details: err.message });
+        db.close();
+      } else if (!round) {
+        console.error('Round not found:', currentRoundId);
+        res.status(404).json({ error: 'Rondte nie gevind nie' });
+        db.close();
+      } else if (!round.is_gesluit) {
+        console.error('Round not closed:', currentRoundId, 'is_gesluit:', round.is_gesluit);
+        res.status(400).json({ error: 'Rondte moet eers gesluit word voordat volgende rondte geskep kan word' });
+        db.close();
+      } else {
+        console.log('Round is closed, checking for remaining teams...');
+        
+        // First check if there are any elimination results for this round
+        db.all('SELECT COUNT(*) as count FROM rondte_uitslag WHERE rondte_id = ?', [currentRoundId], (countErr, countResult) => {
+          if (countErr) {
+            console.error('Error checking elimination results:', countErr);
+            res.status(500).json({ error: 'Kon nie uitslag data kry nie', details: countErr.message });
+            db.close();
+            return;
+          }
+          
+          const eliminationCount = countResult[0].count;
+          console.log('Elimination results found:', eliminationCount);
+          
+          if (eliminationCount === 0) {
+            res.status(400).json({ error: 'Geen uitslag data vir hierdie rondte nie. Maak seker die rondte is gesluit met eliminering.' });
+            db.close();
+            return;
+          }
+          
+          // Get remaining teams from current round
+          db.all(`
+            SELECT ru.span_id, s.naam, s.projek_beskrywing, s.span_bio, s.logo
+            FROM rondte_uitslag ru
+            JOIN Span s ON s.span_id = ru.span_id
+            WHERE ru.rondte_id = ? AND ru.in_gevaar = 0
+            ORDER BY ru.rank
+          `, [currentRoundId], (err, remainingTeams) => {
+            if (err) {
+              console.error('Error getting remaining teams:', err);
+              res.status(500).json({ error: 'Kon nie oorblywende spanne kry nie', details: err.message });
+              db.close();
+            } else {
+              console.log('Remaining teams found:', remainingTeams.length);
+              if (remainingTeams.length === 0) {
+                console.error('No remaining teams for next round');
+                res.status(400).json({ error: 'Geen oorblywende spanne vir volgende rondte nie. Maak seker die rondte is gesluit en spanne is geëlimineer.' });
+                db.close();
+              } else {
+                // Create next round
+                const nextRoundId = currentRoundId + 1;
+                const isLastRound = nextRoundId === 2; // Round 2 is always the final round
+                
+                db.run(`
+                  INSERT INTO Rondte (rondte_id, is_eerste, is_laaste, is_gesluit, max_spanne)
+                  VALUES (?, 0, ?, 0, ?)
+                `, [nextRoundId, isLastRound ? 1 : 0, remainingTeams.length], (insertErr) => {
+                  if (insertErr) {
+                    res.status(500).json({ error: 'Kon nie volgende rondte skep nie', details: insertErr.message });
+                    db.close();
+                  } else {
+                    // Copy criteria from current round to next round
+                    db.all(`
+                      SELECT kriteria_id, totaal
+                      FROM Merkblad
+                      WHERE rondte_id = ?
+                    `, [currentRoundId], (criteriaErr, criteria) => {
+                      if (criteriaErr) {
+                        console.error('Error copying criteria:', criteriaErr);
+                        // Continue even if criteria copy fails
+                        res.json({
+                          message: 'Volgende rondte suksesvol geskep',
+                          next_round_id: nextRoundId,
+                          remaining_teams: remainingTeams,
+                          is_final_round: isLastRound,
+                          teams_count: remainingTeams.length
+                        });
+                        db.close();
+                      } else {
+                        // Insert criteria for next round
+                        const criteriaPromises = criteria.map(crit => {
+                          return new Promise((resolve, reject) => {
+                            db.run(`
+                              INSERT INTO Merkblad (rondte_id, kriteria_id, totaal)
+                              VALUES (?, ?, ?)
+                            `, [nextRoundId, crit.kriteria_id, crit.totaal], (err) => {
+                              if (err) reject(err);
+                              else resolve();
+                            });
+                          });
+                        });
+
+                        Promise.all(criteriaPromises).then(() => {
+                          res.json({
+                            message: 'Volgende rondte suksesvol geskep',
+                            next_round_id: nextRoundId,
+                            remaining_teams: remainingTeams,
+                            is_final_round: isLastRound,
+                            teams_count: remainingTeams.length,
+                            criteria_copied: criteria.length
+                          });
+                          db.close();
+                        }).catch(criteriaInsertErr => {
+                          console.error('Error inserting criteria for next round:', criteriaInsertErr);
+                          res.json({
+                            message: 'Volgende rondte geskep, maar kriteria kon nie gekopieer word nie',
+                            next_round_id: nextRoundId,
+                            remaining_teams: remainingTeams,
+                            is_final_round: isLastRound,
+                            teams_count: remainingTeams.length,
+                            warning: 'Kriteria moet handmatig bygevoeg word'
+                          });
+                          db.close();
+                        });
+                      }
+                    });
+                  }
+                });
+              }
+            }
+          });
+        });
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Kon nie volgende rondte skep nie', details: err.message });
   }
 });
 

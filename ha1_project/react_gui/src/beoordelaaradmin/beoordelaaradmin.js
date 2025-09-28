@@ -11,7 +11,6 @@ function BeoordelaarAdmin() {
   const [winner, setWinner] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [realtimeMarks, setRealtimeMarks] = useState([]);
 
   // Load initial data
   useEffect(() => {
@@ -58,25 +57,6 @@ function BeoordelaarAdmin() {
     loadTeamsWithMarks();
   }, [selectedRound]);
 
-  // Real-time marks updates
-  useEffect(() => {
-    const eventSource = new EventSource("http://localhost:4000/stream");
-  
-    eventSource.onmessage = (event) => {
-      const nuwePunte = JSON.parse(event.data);
-      console.log('Nuwe punte ontvang:', nuwePunte);
-      setRealtimeMarks((prev) => [...prev, nuwePunte]);
-      
-      // Refresh teams with marks if we have a selected round
-      if (selectedRound) {
-        fetchTeamsWithMarks(selectedRound.rondte_id)
-          .then(setTeamsWithMarks)
-          .catch(err => console.error('Error refreshing marks:', err));
-      }
-    };
-  
-    return () => eventSource.close();
-  }, [selectedRound]);
 
   const handleRoundSelect = (roundId) => {
     const round = rounds.find(r => r.rondte_id === roundId);
@@ -87,12 +67,26 @@ function BeoordelaarAdmin() {
   const handleCloseRound = async () => {
     if (!selectedRound) return;
     
-    if (window.confirm('Is jy seker jy wil hierdie rondte sluit? Dit kan nie ongedaan gemaak word nie.')) {
+    // Different confirmation message based on round type
+    const confirmMsg = selectedRound.is_laaste 
+      ? 'Is jy seker jy wil hierdie finale rondte sluit? Die wenner sal bepaal word.'
+      : 'Is jy seker jy wil hierdie rondte sluit? Die onderste 50% van spanne sal uitgeskakel word.';
+    
+    if (window.confirm(confirmMsg)) {
       setLoading(true);
       try {
         const result = await closeRound(selectedRound.rondte_id);
         setWinner(result.winner);
-        alert('Rondte suksesvol gesluit! Wenner: ' + (result.winner ? result.winner.naam : 'Geen wenner nie'));
+        
+        let eliminationMsg;
+        if (result.is_final_round && result.overall_winner) {
+          eliminationMsg = `🏆 FINALE RONDTE GESLUIT! 🏆\n\nAlgehele wenner: ${result.overall_winner.naam}\nGemiddeld punt: ${Math.round(result.overall_winner.gemiddeld_punt || 0)}/100\n\nProficiat aan die wenner span!`;
+        } else if (result.elimination_summary) {
+          eliminationMsg = `Rondte gesluit! ${result.elimination_summary.eliminated_count} spanne uitgeskakel, ${result.elimination_summary.remaining_count} spanne gaan voort.`;
+        } else {
+          eliminationMsg = 'Rondte suksesvol gesluit!';
+        }
+        alert(eliminationMsg);
         
         // Refresh rounds to update status
         const updatedRounds = await fetchRounds();
@@ -118,6 +112,7 @@ function BeoordelaarAdmin() {
       setLoading(false);
     }
   };
+
 
   const getCriteriaName = (criteriaId) => {
     const crit = criteria.find(c => c.kriteria_id === criteriaId);
@@ -169,27 +164,16 @@ function BeoordelaarAdmin() {
           </select>
         </div>
 
-        {/* Real-time Marks Display */}
-        <div className="realtime-marks">
-          <h3>Real-time Punte Updates</h3>
-          <div className="marks-stream">
-            {realtimeMarks.length === 0 ? (
-              <p>Geen real-time updates nie</p>
-            ) : (
-              realtimeMarks.slice(-5).reverse().map((mark, index) => (
-                <div key={index} className="mark-update">
-                  <span className="timestamp">{new Date().toLocaleTimeString()}</span>
-                  <span>Kriteria1: {mark.kriteria1} | Kriteria2: {mark.kriteria2} | Kriteria3: {mark.kriteria3}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
 
         {/* Teams with Marks Display */}
         {selectedRound && (
           <div className="teams-marks-section">
             <h3>Span Punte vir Rondte {selectedRound.rondte_id}</h3>
+            {selectedRound.rondte_id > 1 && (
+              <div className="round-info-banner">
+                <p><strong>⚠️ Let op:</strong> Hierdie rondte toon slegs spanne wat nie in die vorige rondte uitgeskakel is nie.</p>
+              </div>
+            )}
             <div className="teams-grid">
               {teamsWithMarks.map(team => (
                 <div key={team.span_id} className="team-marks-card">
@@ -221,9 +205,23 @@ function BeoordelaarAdmin() {
         )}
 
         {/* Round Management */}
+        {!selectedRound && (
+          <div className="round-management">
+            <h3>Rondte Bestuur</h3>
+            <div className="no-round-selected">
+              <p><strong>Geen rondte gekies nie!</strong> Kies eers 'n rondte van die dropdown hierbo.</p>
+            </div>
+          </div>
+        )}
+        
         {selectedRound && (
           <div className="round-management">
             <h3>Rondte Bestuur</h3>
+            <div className="round-info">
+              <p><strong>Selected Round:</strong> {selectedRound.rondte_id}</p>
+              <p><strong>Is Closed:</strong> {selectedRound.is_gesluit ? 'Yes' : 'No'}</p>
+              <p><strong>Is Final Round:</strong> {selectedRound.is_laaste ? 'Yes' : 'No'}</p>
+            </div>
             <div className="round-actions">
               {!selectedRound.is_gesluit ? (
                 <button 
@@ -231,18 +229,20 @@ function BeoordelaarAdmin() {
                   className="btn btn-danger"
                   disabled={loading}
                 >
-                  Sluit Rondte
+                  {selectedRound.is_laaste ? 'Sluit Rondte' : 'Sluit Rondte (Elimineer Onderste 50%)'}
                 </button>
               ) : (
                 <div className="round-closed">
                   <p>Rondte is reeds gesluit</p>
-                  <button 
-                    onClick={handleShowWinner}
-                    className="btn btn-primary"
-                    disabled={loading}
-                  >
-                    Vertoon Wenner
-                  </button>
+                  <div className="closed-round-actions">
+                    <button 
+                      onClick={handleShowWinner}
+                      className="btn btn-primary"
+                      disabled={loading}
+                    >
+                      Vertoon Wenner
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -253,6 +253,14 @@ function BeoordelaarAdmin() {
         {winner && (
           <div className="winner-section">
             <h3>🏆 Wenner Span</h3>
+            {selectedRound?.is_laaste && (
+              <div className="overall-winner-banner">
+                <p><strong>Proficiat! Hierdie span het die hele toernooi gewen!</strong></p>
+                {selectedRound?.rondte_id === 2 && (
+                  <p><strong>Rondte 2 Wenner uit 5 spanne!</strong></p>
+                )}
+              </div>
+            )}
             <div className="winner-card">
               <div className="winner-header">
                 {winner.logo && (
@@ -296,6 +304,7 @@ function BeoordelaarAdmin() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

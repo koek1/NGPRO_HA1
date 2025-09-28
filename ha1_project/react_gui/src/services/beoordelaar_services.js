@@ -61,6 +61,39 @@ export const closeRound = async (roundId) => {
   }
 };
 
+// Fetch elimination results for a round
+export const fetchEliminationResults = async (roundId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rounds/${roundId}/elimination`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching elimination results:', error);
+    throw error;
+  }
+};
+
+// Create next round with remaining teams
+export const createNextRound = async (roundId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rounds/${roundId}/create-next`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating next round:', error);
+    throw error;
+  }
+};
+
 // Fetch winner for a closed round
 export const fetchWinner = async (roundId) => {
   try {

@@ -37,16 +37,20 @@ export const fetchAllTeams = async () => {
  * Submit marks for a specific team
  * @param {number} teamId - Team ID to submit marks for
  * @param {Object} marks - Marks object with kriteria1, kriteria2, kriteria3
+ * @param {number} roundId - Round ID to submit marks for (defaults to 1)
  * @returns {Promise<Object>} Response from server
  */
-export const submitMarks = async (teamId, marks) => {
+export const submitMarks = async (teamId, marks, roundId = 1) => {
   try {
     const response = await fetch(`${API_BASE_URL}/teams/${teamId}/marks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(marks),
+      body: JSON.stringify({
+        ...marks,
+        rondteId: roundId
+      }),
     });
     
     if (!response.ok) {
@@ -64,11 +68,12 @@ export const submitMarks = async (teamId, marks) => {
 /**
  * Fetch marks for a specific team
  * @param {number} teamId - Team ID to fetch marks for
+ * @param {number} roundId - Round ID to fetch marks for (defaults to 1)
  * @returns {Promise<Object>} Marks data for the team
  */
-export const fetchTeamMarks = async (teamId) => {
+export const fetchTeamMarks = async (teamId, roundId = 1) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/teams/${teamId}/marks`);
+    const response = await fetch(`${API_BASE_URL}/teams/${teamId}/marks?rondteId=${roundId}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch team marks: ${response.status} ${response.statusText}`);
     }

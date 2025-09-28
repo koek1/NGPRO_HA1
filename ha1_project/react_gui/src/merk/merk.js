@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import { stuurPunte, fetchAllTeams, submitMarks, fetchTeamMarks } from "../services/merk_services";
+import { fetchRounds } from "../services/beoordelaar_services";
 import "./merk.css";
 
 function Merk() {
   const [message, setMessage] = useState("");
   const [teams, setTeams] = useState([]);
+  const [rounds, setRounds] = useState([]);
+  const [selectedRoundId, setSelectedRoundId] = useState(1);
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [marks, setMarks] = useState({
@@ -15,26 +18,64 @@ function Merk() {
   const [loading, setLoading] = useState(false);
   const [existingMarks, setExistingMarks] = useState(null);
 
-  // Load teams on component mount
+  // Load rounds on component mount
   useEffect(() => {
-    const loadTeams = async () => {
+    const loadRounds = async () => {
       try {
-        const teamsData = await fetchAllTeams();
-        setTeams(teamsData);
+        const roundsData = await fetchRounds();
+        setRounds(roundsData);
       } catch (error) {
-        setMessage("Fout met laai van spanne: " + error.message);
+        setMessage("Fout met laai van rondtes: " + error.message);
       }
     };
     
-    loadTeams();
+    loadRounds();
   }, []);
+
+  // Load teams when round changes
+  useEffect(() => {
+    const loadTeamsForRound = async () => {
+      try {
+        if (selectedRoundId === 1) {
+          // Round 1: Show all teams
+          const teamsData = await fetchAllTeams();
+          setTeams(teamsData);
+        } else {
+          // Round 2+: Only show teams that were not eliminated in the previous round
+          const response = await fetch(`http://localhost:4000/rounds/${selectedRoundId - 1}/elimination`);
+          if (response.ok) {
+            const eliminationData = await response.json();
+            setTeams(eliminationData.remaining_teams || []);
+          } else {
+            setMessage("Kon nie oorblywende spanne laai nie vir Rondte " + selectedRoundId);
+            setTeams([]);
+          }
+        }
+      } catch (error) {
+        setMessage("Fout met laai van spanne vir Rondte " + selectedRoundId + ": " + error.message);
+        setTeams([]);
+      }
+    };
+    
+    loadTeamsForRound();
+    
+    // Clear selected team when round changes
+    setSelectedTeamId("");
+    setSelectedTeam(null);
+    setMarks({
+      kriteria1: "",
+      kriteria2: "",
+      kriteria3: ""
+    });
+    setExistingMarks(null);
+  }, [selectedRoundId]);
 
   // Load existing marks when team is selected
   useEffect(() => {
     const loadExistingMarks = async () => {
-      if (selectedTeamId) {
+      if (selectedTeamId && selectedRoundId) {
         try {
-          const marksData = await fetchTeamMarks(selectedTeamId);
+          const marksData = await fetchTeamMarks(selectedTeamId, selectedRoundId);
           setExistingMarks(marksData);
           
           // Pre-fill form with existing marks if they exist
@@ -66,7 +107,7 @@ function Merk() {
     };
 
     loadExistingMarks();
-  }, [selectedTeamId]);
+  }, [selectedTeamId, selectedRoundId]);
 
   // Update selected team when team ID changes
   useEffect(() => {
@@ -132,9 +173,9 @@ function Merk() {
         kriteria1: kriteria1,
         kriteria2: kriteria2,
         kriteria3: kriteria3
-      });
+      }, selectedRoundId);
       
-      setMessage("Punte suksesvol gestuur vir " + (selectedTeam?.naam || "geselekteerde span") + "!");
+      setMessage("Punte suksesvol gestuur vir " + (selectedTeam?.naam || "geselekteerde span") + " in Rondte " + selectedRoundId + "!");
       
       // Reload existing marks to show updated data
       const marksData = await fetchTeamMarks(selectedTeamId);
@@ -158,41 +199,78 @@ function Merk() {
         <div className="merk-step">
           <h3>
             <span className="step-number">1</span>
-            Kies 'n span om te merk
+            Kies 'n rondte en span om te merk
           </h3>
+          
+          <div className="round-selector" style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '10px', color: '#333', fontWeight: 'bold' }}>
+              Rondte:
+            </label>
+            <select
+              value={selectedRoundId}
+              onChange={(e) => setSelectedRoundId(parseInt(e.target.value))}
+              className="team-select"
+              style={{ maxWidth: '300px' }}
+            >
+              {rounds.map(round => (
+                <option key={round.rondte_id} value={round.rondte_id}>
+                  Rondte {round.rondte_id} {round.is_gesluit ? '(Gesluit)' : '(Aktief)'}
+                </option>
+              ))}
+            </select>
+          </div>
+          
           <div className="team-selector">
+            <label style={{ display: 'block', marginBottom: '10px', color: '#333', fontWeight: 'bold' }}>
+              Spanne vir Rondte {selectedRoundId}:
+            </label>
             <select 
               value={selectedTeamId} 
               onChange={handleTeamChange}
               className="team-select"
             >
               <option value="">-- Kies 'n span --</option>
-              {teams.map(team => (
-                <option key={team.span_id} value={team.span_id}>
-                  {team.naam}
+              {teams.length === 0 ? (
+                <option value="" disabled>
+                  {selectedRoundId === 1 ? "Laai spanne..." : "Geen spanne beskikbaar vir hierdie rondte nie"}
                 </option>
-              ))}
+              ) : (
+                teams.map(team => (
+                  <option key={team.span_id} value={team.span_id}>
+                    {team.naam}
+                  </option>
+                ))
+              )}
             </select>
+            {selectedRoundId > 1 && teams.length > 0 && (
+              <p style={{ marginTop: '10px', color: '#666', fontSize: '0.9em' }}>
+                Toon slegs spanne wat nie in Rondte {selectedRoundId - 1} uitgeskakel is nie
+              </p>
+            )}
             
             {selectedTeam && (
               <div className="team-info-card">
                 <h4>Geselekteerde span: {selectedTeam.naam}</h4>
                 <p><strong>Projek:</strong> {selectedTeam.projek_beskrywing}</p>
                 <p><strong>Bio:</strong> {selectedTeam.span_bio}</p>
-                {existingMarks?.has_marks ? (
-                  <div className="existing-marks">
-                    <strong>Bestaande punte:</strong>
-                    <ul>
-                      <li>Backend Development: {existingMarks.marks.kriteria1}/100</li>
-                      <li>Frontend Development: {existingMarks.marks.kriteria2}/100</li>
-                      <li>Database Design: {existingMarks.marks.kriteria3}/100</li>
-                    </ul>
-                  </div>
-                ) : (
-                  <div className="no-marks-message">
-                    Hierdie span het nog nie punte ontvang nie.
-                  </div>
-                )}
+                
+                {/* Always show marks section */}
+                <div className="marks-section">
+                  <strong>Bestaande punte vir Rondte {selectedRoundId}:</strong>
+                  {existingMarks?.has_marks ? (
+                    <div className="existing-marks">
+                      <ul>
+                        <li>Backend Development: {existingMarks.marks.kriteria1}/100</li>
+                        <li>Frontend Development: {existingMarks.marks.kriteria2}/100</li>
+                        <li>Database Design: {existingMarks.marks.kriteria3}/100</li>
+                      </ul>
+                    </div>
+                  ) : (
+                    <div className="no-marks-message">
+                      Hierdie span het nog nie punte ontvang nie vir hierdie rondte.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
